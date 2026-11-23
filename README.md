@@ -72,6 +72,44 @@ Include the configured bootstrap manager and the new host in the run. To add a m
 ansible-playbook -i inventory.yml swarm.yml --limit swarm-m1,swarm-w2
 ```
 
+### Install Docker without creating a Swarm
+
+Use the role's `install` entry point to install Docker CE, optionally apply `daemon.json`, and enable and start `docker.service`. This entry point requires neither `docker_swarm_node_role` nor `docker_swarm_advertise_addr`.
+
+Create `docker-inventory.yml` and replace `docker-1.example.com` with a hostname or SSH alias. Omit the `docker_swarm_daemon_config` mapping if you want to manage `daemon.json` separately.
+
+```yaml
+docker_hosts:
+  hosts:
+    docker-1.example.com:
+  vars:
+    docker_swarm_daemon_config:
+      log-driver: json-file
+      log-opts:
+        max-size: "100m"
+        max-file: "5"
+```
+
+Create `docker.yml` in the repository root.
+
+```yaml
+---
+- name: Install and configure Docker CE
+  hosts: docker_hosts
+  gather_facts: false
+  strategy: linear
+  become: true
+  tasks:
+    - name: Run Docker installation and configuration
+      ansible.builtin.import_role:
+        name: docker_swarm
+        tasks_from: install
+```
+
+```bash
+ansible-playbook -i docker-inventory.yml docker.yml
+```
+
 ## Variables
 
 | Variable | Default | Purpose |
