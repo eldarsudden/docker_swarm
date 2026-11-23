@@ -21,16 +21,15 @@ all:
   #     fixed-cidr: "172.16.0.0/24"
   children:
     docker_swarm:
+      vars:
+        # Replace ens192 with the interface used by Swarm on these hosts.
+        docker_swarm_advertise_addr: ens192
       hosts:
         swarm-m1:
           docker_swarm_node_role: manager
-          docker_swarm_advertise_addr: 192.0.2.11
         swarm-m2:
           docker_swarm_node_role: manager
-          docker_swarm_advertise_addr: 192.0.2.12
         swarm-m3:
           docker_swarm_node_role: manager
-          docker_swarm_advertise_addr: 192.0.2.13
         swarm-w1:
           docker_swarm_node_role: worker
-          docker_swarm_advertise_addr: 192.0.2.21

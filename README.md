@@ -6,7 +6,7 @@ The role works with Ansible 2.10 or later and requires no external collections. 
 
 ## Prerequisites
 
-1. Edit the `docker_swarm` group in `inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set `docker_swarm_advertise_addr` for each host and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker`. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
+1. Edit the `docker_swarm` group in `inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set the shared Swarm interface in the group variables and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker` to each host. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
 2. Set `docker_swarm_bootstrap_host` in `swarm.yml` to a manager's inventory name. The examples use `swarm-m1`. For an existing cluster, choose a reachable manager that already belongs to that Swarm.
 3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the operating system and Docker repositories.
 4. Allow `2377/tcp` to managers, plus `7946/tcp`, `7946/udp`, and `4789/udp` between Swarm nodes. Encrypted overlay networks also need IP protocol 50 (ESP). Limit access to the cluster network. [Swarm network requirements](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
@@ -59,11 +59,10 @@ ansible-playbook -i inventory.yml swarm.yml
 
 ### Add a worker to an existing cluster
 
-Add an entry under `all.children.docker_swarm.hosts` in `inventory.yml`. Replace the example hostname and Swarm address with those of the new worker.
+Add an entry under `all.children.docker_swarm.hosts` in `inventory.yml` and replace the example hostname. The worker inherits the Swarm interface from the group.
 
 ```yaml
 swarm-w2:
-  docker_swarm_advertise_addr: 192.0.2.22
   docker_swarm_node_role: worker
 ```
 
@@ -78,7 +77,7 @@ ansible-playbook -i inventory.yml swarm.yml --limit swarm-m1,swarm-w2
 | Variable | Default | Purpose |
 |---|---|---|
 | `docker_swarm_bootstrap_host` | First manager in the inventory | Inventory name of the manager used to initialize or access the cluster. |
-| `docker_swarm_advertise_addr` | Required for each host | Swarm IP address or interface name. Examples with a port include `10.0.0.11:2377` and `[2001:db8::11]:2377`. |
+| `docker_swarm_advertise_addr` | Required, inherited from the group or set per host | Swarm interface name or IP address. Examples with a port include `10.0.0.11:2377` and `[2001:db8::11]:2377`. |
 | `docker_swarm_listen_addr` | `0.0.0.0:2377` | Swarm listen address and port for initialization or join. |
 | `docker_swarm_data_path_addr` | Empty | IP address or interface for overlay traffic. Docker defaults to the advertised address. |
 | `docker_swarm_daemon_config` | Unset | YAML mapping written to `/etc/docker/daemon.json`. |
@@ -88,6 +87,28 @@ ansible-playbook -i inventory.yml swarm.yml --limit swarm-m1,swarm-w2
 | `docker_swarm_default_addr_pool_mask_length` | Docker's default of `24` | Prefix length for each overlay subnet allocated from the configured pools. |
 | `docker_swarm_backup_dir` | `/var/backups/docker-swarm` | Directory on the manager for Swarm state archives. |
 | `docker_swarm_allow_single_manager_outage` | `false` | Allows a planned interruption when the cluster has one manager. |
+
+## Swarm advertise address
+
+When all nodes use the same interface name for Swarm traffic, set `docker_swarm_advertise_addr` once under `all.children.docker_swarm.vars`. Replace `ens192` with the interface name on your hosts. Docker uses that interface's IP address on each node.
+
+```yaml
+all:
+  children:
+    docker_swarm:
+      vars:
+        docker_swarm_advertise_addr: ens192
+      hosts:
+        swarm-m1:
+          docker_swarm_node_role: manager
+        swarm-w1:
+          docker_swarm_node_role: worker
+          docker_swarm_advertise_addr: ens224
+```
+
+In this example, `swarm-m1` inherits `ens192` and `swarm-w1` overrides it with `ens224`. You can also override the group value with an explicit IP address. Use stable addresses on managers and ensure the advertised addresses are reachable from the other nodes. [Docker Swarm advertise address](https://docs.docker.com/engine/swarm/swarm-mode/#configure-the-advertise-address)
+
+Docker can select the advertise address automatically when a node has a single IP address and `--advertise-addr` is omitted. This role requires an explicit value and passes it during `swarm init` and `swarm join`. [Docker Swarm join options](https://docs.docker.com/reference/cli/docker/swarm/join/#advertise-addr)
 
 ## Overlay address pools
 
