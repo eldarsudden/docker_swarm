@@ -4,6 +4,28 @@ The `docker_swarm` role installs Docker CE, enables and starts `docker.service`,
 
 The role works with Ansible 2.10 or later and requires no external collections. Remote tasks use `ansible.builtin.raw` and an action plugin bundled with the role. Only the control node needs Python. Ansible 2.10 can run with Python 3.9 and Jinja2 3.0. [Ansible support matrix](https://docs.ansible.com/projects/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix)
 
+## Install the role
+
+From your Ansible project, clone this repository as `roles/docker_swarm`.
+
+```bash
+mkdir -p roles
+git clone https://github.com/eldarsudden/docker_swarm.git roles/docker_swarm
+```
+
+Reference the role by name in your playbook.
+
+```yaml
+---
+- name: Install Docker and configure Swarm
+  hosts: docker_swarm
+  gather_facts: false
+  strategy: linear
+  any_errors_fatal: true
+  roles:
+    - role: docker_swarm
+```
+
 ## Prerequisites
 
 1. Edit the `docker_swarm` group in `examples/inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set the shared Swarm interface in the group variables and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker` to each host. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
@@ -11,7 +33,7 @@ The role works with Ansible 2.10 or later and requires no external collections. 
 3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the operating system and Docker repositories.
 4. Allow `2377/tcp` to managers, plus `7946/tcp`, `7946/udp`, and `4789/udp` between Swarm nodes. Encrypted overlay networks also need IP protocol 50 (ESP). Limit access to the cluster network. [Swarm network requirements](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
 
-Run the examples from the repository root. Use `-u` to select an SSH user and `-K` if `sudo` requires a password.
+Run the examples from the repository root in a checkout named `docker_swarm`. The bundled `ansible.cfg` adds the parent directory to the role search path. Use `-u` to select an SSH user and `-K` if `sudo` requires a password.
 
 | Path | Purpose |
 |---|---|
@@ -20,7 +42,7 @@ Run the examples from the repository root. Use `-u` to select an SSH user and `-
 | [`examples/backup.yml`](examples/backup.yml) | Backs up Swarm state on one manager. |
 | [`examples/docker-inventory.yml`](examples/docker-inventory.yml) | Inventory for standalone Docker hosts. |
 | [`examples/docker.yml`](examples/docker.yml) | Installs and configures Docker without creating a Swarm. |
-| [`roles/docker_swarm/`](roles/docker_swarm/) | Role used by the example playbooks. |
+| [`tasks/`](tasks/), [`defaults/`](defaults/), [`meta/`](meta/) | Role tasks, default variables, and metadata. |
 
 The role also supports the `docker_swarm_managers` and `docker_swarm_workers` inventory groups. A host's explicit `docker_swarm_node_role` takes precedence. If the role of an existing node differs from the inventory, the play fails. Promote or demote the node using Swarm before reconciling its inventory entry.
 

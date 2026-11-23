@@ -7,5 +7,5 @@
   tasks:
     - name: Run Docker installation and configuration
       ansible.builtin.import_role:
-        name: "{{ playbook_dir }}/../roles/docker_swarm"
+        name: docker_swarm
         tasks_from: install

@@ -7,4 +7,4 @@
   vars:
     docker_swarm_bootstrap_host: swarm-m1
   roles:
-    - role: "{{ playbook_dir }}/../roles/docker_swarm"
+    - role: docker_swarm
