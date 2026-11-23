@@ -24,17 +24,13 @@ all:
       hosts:
         swarm-m1:
           docker_swarm_node_role: manager
-          ansible_host: 192.0.2.11
           docker_swarm_advertise_addr: 192.0.2.11
         swarm-m2:
           docker_swarm_node_role: manager
-          ansible_host: 192.0.2.12
           docker_swarm_advertise_addr: 192.0.2.12
         swarm-m3:
           docker_swarm_node_role: manager
-          ansible_host: 192.0.2.13
           docker_swarm_advertise_addr: 192.0.2.13
         swarm-w1:
           docker_swarm_node_role: worker
-          ansible_host: 192.0.2.21
           docker_swarm_advertise_addr: 192.0.2.21

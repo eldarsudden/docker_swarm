@@ -6,7 +6,7 @@ The role works with Ansible 2.10 or later and requires no external collections. 
 
 ## Prerequisites
 
-1. Edit the `docker_swarm` group in `inventory.yml`. Set the SSH and Swarm addresses for each host and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker`. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
+1. Edit the `docker_swarm` group in `inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set `docker_swarm_advertise_addr` for each host and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker`. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
 2. Set `docker_swarm_bootstrap_host` in `swarm.yml` to a manager's inventory name. The examples use `swarm-m1`. For an existing cluster, choose a reachable manager that already belongs to that Swarm.
 3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the operating system and Docker repositories.
 4. Allow `2377/tcp` to managers, plus `7946/tcp`, `7946/udp`, and `4789/udp` between Swarm nodes. Encrypted overlay networks also need IP protocol 50 (ESP). Limit access to the cluster network. [Swarm network requirements](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
@@ -59,11 +59,10 @@ ansible-playbook -i inventory.yml swarm.yml
 
 ### Add a worker to an existing cluster
 
-Add an entry under `all.children.docker_swarm.hosts` in `inventory.yml` and replace the example addresses.
+Add an entry under `all.children.docker_swarm.hosts` in `inventory.yml`. Replace the example hostname and Swarm address with those of the new worker.
 
 ```yaml
 swarm-w2:
-  ansible_host: 192.0.2.22
   docker_swarm_advertise_addr: 192.0.2.22
   docker_swarm_node_role: worker
 ```
