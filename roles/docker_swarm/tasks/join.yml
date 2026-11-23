@@ -1,0 +1,18 @@
+---
+- name: Read the Swarm join token from the bootstrap manager
+  ansible.builtin.raw: "{{ _docker_swarm_cli }} swarm join-token --quiet {{ _docker_swarm_expected_role | quote }}"
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  register: _docker_swarm_token
+  changed_when: false
+  no_log: true
+
+- name: Join this node to the Swarm
+  docker_swarm_stdin:
+    command: |
+      IFS= read -r token && [ -n "$token" ] || exit 1
+      exec {{ _docker_swarm_cli }} swarm join \
+      {{ _docker_swarm_network_flags | trim }} \
+      --token="$token" {{ _docker_swarm_endpoint.stdout | trim | quote }}
+    stdin: "{{ _docker_swarm_token.stdout | trim }}"
+  throttle: 1
+  no_log: true

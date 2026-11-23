@@ -1,0 +1,10 @@
+---
+- name: Back up Docker Swarm on one manager
+  hosts: docker_swarm:docker_swarm_managers
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Run the Docker Swarm backup
+      ansible.builtin.import_role:
+        name: docker_swarm
+        tasks_from: backup

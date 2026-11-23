@@ -1,0 +1,40 @@
+---
+all:
+  # Optional shared settings. Choose pools before the first Swarm initialization.
+  # vars:
+  #   docker_swarm_default_addr_pools:
+  #     - "10.240.0.0/16"
+  #   docker_swarm_default_addr_pool_mask_length: 24
+  #   docker_swarm_daemon_config:
+  #     log-driver: json-file
+  #     log-opts:
+  #       max-size: "100m"
+  #       max-file: "5"
+  #     max-concurrent-downloads: 3
+  #     max-concurrent-uploads: 5
+  #     debug: false
+  #     selinux-enabled: false
+  #     ip: "0.0.0.0"
+  #     group: docker
+  #     insecure-registries: []
+  #     bip: "172.16.0.1/24"
+  #     fixed-cidr: "172.16.0.0/24"
+  children:
+    docker_swarm:
+      hosts:
+        swarm-m1:
+          docker_swarm_node_role: manager
+          ansible_host: 192.0.2.11
+          docker_swarm_advertise_addr: 192.0.2.11
+        swarm-m2:
+          docker_swarm_node_role: manager
+          ansible_host: 192.0.2.12
+          docker_swarm_advertise_addr: 192.0.2.12
+        swarm-m3:
+          docker_swarm_node_role: manager
+          ansible_host: 192.0.2.13
+          docker_swarm_advertise_addr: 192.0.2.13
+        swarm-w1:
+          docker_swarm_node_role: worker
+          ansible_host: 192.0.2.21
+          docker_swarm_advertise_addr: 192.0.2.21

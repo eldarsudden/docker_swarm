@@ -1,0 +1,52 @@
+swarm_docker() {
+  timeout 5s {{ _docker_swarm_cli }} "$@"
+}
+
+{% raw %}
+swarm_local_state() {
+  swarm_docker info --format '{{.Swarm.LocalNodeState}} {{.Swarm.ControlAvailable}} {{.Swarm.NodeID}}'
+}
+
+swarm_data_root() {
+  swarm_docker info --format '{{.DockerRootDir}}'
+}
+
+swarm_manager_can_stop() {
+  local node_id="$1" allow_single="$2" autolock managers
+
+  autolock=$(swarm_docker info --format '{{.Swarm.Cluster.Spec.EncryptionConfig.AutoLockManagers}}') || return 1
+  if [ "$autolock" != false ]; then
+    echo "Swarm manager autolock must be disabled for unattended maintenance." >&2
+    return 1
+  fi
+
+  managers=$(swarm_docker node ls --filter role=manager --no-trunc --format '{{.ID}} {{.ManagerStatus}}') || return 1
+  printf '%s\n' "$managers" | awk -v node_id="$node_id" -v allow_single="$allow_single" '
+    NF {
+      total++
+      if ($1 == node_id) {
+        self = ($2 == "Leader" || $2 == "Reachable")
+      } else if ($2 == "Leader" || $2 == "Reachable") {
+        others++
+      }
+    }
+    END { exit !(self && ((total == 1 && allow_single == "true") || others >= int(total / 2) + 1)) }
+  ' || {
+    echo "Stopping this Swarm manager would put the quorum at risk." >&2
+    return 1
+  }
+}
+
+swarm_wait_for_manager() {
+  local node_id="$1" attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if [ "$(swarm_docker node inspect "$node_id" --format '{{.Status.State}} {{.ManagerStatus.Reachability}}' 2>/dev/null)" = 'ready reachable' ]; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+  echo "Swarm manager $node_id did not return to Ready and Reachable." >&2
+  return 1
+}
+{% endraw %}

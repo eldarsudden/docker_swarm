@@ -1,0 +1,6 @@
+---
+galaxy_info:
+  role_name: docker_swarm
+  description: Install Docker CE and form a Docker Swarm on Enterprise Linux 9 and 10
+  min_ansible_version: "2.10"
+dependencies: []

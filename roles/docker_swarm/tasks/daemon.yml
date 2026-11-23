@@ -1,0 +1,88 @@
+---
+- name: Validate and apply daemon.json
+  vars:
+    _docker_swarm_desired_daemon_config: "{{ hostvars[_docker_swarm_daemon_host].docker_swarm_daemon_config }}"
+  docker_swarm_stdin:
+    stdin: "{{ _docker_swarm_desired_daemon_config | to_nice_json(indent=2, sort_keys=true, allow_nan=false) }}"
+    command: |
+      set -eu
+      {{ lookup('template', 'swarm-maintenance.sh.j2') }}
+      config=/etc/docker/daemon.json
+      mkdir -p -- /etc/docker
+      stage=$(mktemp -d /etc/docker/.daemon-json.XXXXXX)
+      trap 'rm -rf -- "$stage"' EXIT
+      umask 077
+      candidate="$stage/daemon.json"
+      cat > "$candidate"
+      if cmp -s -- "$candidate" "$config"; then
+        exit 0
+      fi
+
+      dockerd --validate --config-file="$candidate"
+      if [ -e "$config" ] || [ -L "$config" ]; then
+        cp -a -- "$config" "$stage/previous"
+      fi
+      was_active=false
+      manager_id=
+      if systemctl is-active --quiet docker.service; then
+        was_active=true
+        local_state=$(swarm_local_state)
+        read -r state control node_id <<EOF
+      $local_state
+      EOF
+        case "$state" in
+          inactive) ;;
+          active)
+            current_root=$(swarm_data_root)
+            desired_root={{ _docker_swarm_desired_daemon_config.get('data-root', '/var/lib/docker') | quote }}
+            if [ "$(readlink -m -- "$current_root")" != "$(readlink -m -- "$desired_root")" ]; then
+              exit 21
+            fi
+            if [ "$control" = true ]; then
+              manager_id=$node_id
+              swarm_manager_can_stop "$manager_id" {{ hostvars[_docker_swarm_daemon_host].get('docker_swarm_allow_single_manager_outage', docker_swarm_allow_single_manager_outage) | bool | ternary('true', 'false') }} || exit 22
+            fi
+            ;;
+          *) exit 23 ;;
+        esac
+      fi
+
+      mv -fT -- "$candidate" "$config"
+      if systemctl restart docker.service &&
+         { [ -z "$manager_id" ] || swarm_wait_for_manager "$manager_id"; }; then
+        echo DOCKER_SWARM_CHANGED
+        exit 0
+      fi
+
+      if [ -e "$stage/previous" ] || [ -L "$stage/previous" ]; then
+        mv -fT -- "$stage/previous" "$config"
+      else
+        rm -f -- "$config"
+      fi
+      if [ "$was_active" = true ]; then
+        systemctl restart docker.service || exit 25
+        if [ -n "$manager_id" ]; then
+          swarm_wait_for_manager "$manager_id" || exit 25
+        fi
+      fi
+      exit 24
+  register: _docker_swarm_daemon_apply
+  delegate_to: "{{ _docker_swarm_daemon_host }}"
+  changed_when: "'DOCKER_SWARM_CHANGED' in _docker_swarm_daemon_apply.stdout_lines"
+  no_log: true
+  failed_when: false
+
+- name: Report failure to apply daemon.json
+  ansible.builtin.fail:
+    msg: >-
+      {{ _docker_swarm_daemon_host }}.
+      {{ {
+        21: 'Changing data-root on an active Swarm node requires a separate data migration.',
+        22: 'Manager restart refused because quorum cannot be maintained or autolock is enabled.',
+        23: 'Docker reports an unexpected local Swarm state.',
+        24: 'The new Docker configuration did not start or the manager did not recover. The previous file was restored.',
+        25: 'The previous file was restored, but the Docker service or Swarm manager did not recover.'
+      }.get(_docker_swarm_daemon_apply.rc | default(1) | int,
+            'Could not validate or apply daemon.json. Check the settings and Docker service logs.') }}
+  when: _docker_swarm_daemon_apply.rc | default(1) != 0
+  any_errors_fatal: true

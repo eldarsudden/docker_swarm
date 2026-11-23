@@ -1,0 +1,70 @@
+---
+# raw keeps EL10's system Python independent of the Ansible version.
+- name: Configure the Docker CE stable RPM repository
+  ansible.builtin.raw: |
+    set -eu
+    . /etc/os-release
+    major=${VERSION_ID%%.*}
+    case "$major" in
+      9|10) ;;
+      *) echo "Unsupported OS version: $ID $VERSION_ID" >&2; exit 1 ;;
+    esac
+    case "$ID" in
+      rhel|centos|rocky) distro=$ID ;;
+      ol) distro=oracle ;;
+      almalinux) distro=alma ;;
+      *) echo "Unsupported OS: $ID" >&2; exit 1 ;;
+    esac
+    base_url="https://download.docker.com/linux/$distro"
+    repo=/etc/yum.repos.d/docker-swarm-ce.repo
+    candidate=$(mktemp "${repo}.XXXXXX")
+    trap 'rm -f -- "$candidate"' EXIT
+    cat > "$candidate" <<EOF
+    [docker-swarm-ce-stable]
+    name=Docker CE Stable
+    baseurl=$base_url/$major/\$basearch/stable
+    enabled=1
+    gpgcheck=1
+    gpgkey=$base_url/gpg
+    EOF
+    if ! cmp -s -- "$candidate" "$repo"; then
+      chmod 0644 "$candidate"
+      mv -f -- "$candidate" "$repo"
+      echo DOCKER_SWARM_CHANGED
+    fi
+  register: _docker_swarm_repo
+  changed_when: "'DOCKER_SWARM_CHANGED' in _docker_swarm_repo.stdout_lines"
+
+- name: Install Docker CE, containerd and Docker CLI plugins
+  ansible.builtin.raw: |
+    set -eu
+    set -- docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    if ! rpm -q -- "$@" >/dev/null; then
+      dnf -y install "$@"
+      echo DOCKER_SWARM_CHANGED
+    fi
+  register: _docker_swarm_packages
+  changed_when: "'DOCKER_SWARM_CHANGED' in _docker_swarm_packages.stdout_lines"
+
+- name: Apply daemon.json to each configured host in sequence
+  ansible.builtin.include_tasks: daemon.yml
+  run_once: true
+  loop: >-
+    {{ ansible_play_batch | map('extract', hostvars) | selectattr('docker_swarm_daemon_config', 'defined') |
+       map(attribute='inventory_hostname') | list }}
+  loop_control:
+    loop_var: _docker_swarm_daemon_host
+
+- name: Enable and start the Docker service
+  ansible.builtin.raw: |
+    set -eu
+    if ! systemctl is-enabled --quiet docker.service; then
+      systemctl enable docker.service
+      echo DOCKER_SWARM_CHANGED
+    fi
+    if ! systemctl is-active --quiet docker.service; then
+      systemctl start docker.service
+      echo DOCKER_SWARM_CHANGED
+    fi
+  register: _docker_swarm_service
+  changed_when: "'DOCKER_SWARM_CHANGED' in _docker_swarm_service.stdout_lines"

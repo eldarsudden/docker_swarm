@@ -1,0 +1,62 @@
+---
+- name: Install Docker and configure Swarm
+  become: true
+  any_errors_fatal: true
+  block:
+    - name: Validate Swarm inventory and play batch
+      ansible.builtin.assert:
+        that:
+          - docker_swarm_bootstrap_host in _docker_swarm_managers
+          - docker_swarm_bootstrap_host in ansible_play_batch
+          - _docker_swarm_managers | intersect(_docker_swarm_workers) | length == 0
+          - _docker_swarm_members | difference(_docker_swarm_managers + _docker_swarm_workers) | length == 0
+          - ansible_play_hosts_all | difference(ansible_play_batch) | length == 0
+          - ansible_play_batch | difference(_docker_swarm_members) | length == 0
+        fail_msg: >-
+          Run in one linear play batch containing docker_swarm_bootstrap_host.
+          Set docker_swarm_node_role to manager or worker, or use one legacy role group per host.
+      run_once: true
+
+    - name: Validate Swarm addresses
+      ansible.builtin.assert:
+        that:
+          - docker_swarm_advertise_addr is string
+          - docker_swarm_advertise_addr | trim | length > 0
+          - docker_swarm_listen_addr is string
+          - docker_swarm_listen_addr | trim | length > 0
+          - docker_swarm_data_path_addr is string
+        fail_msg: Set docker_swarm_advertise_addr to the IP or interface on the Swarm network.
+
+    - name: Validate the Swarm overlay pool settings
+      ansible.builtin.assert:
+        that:
+          - docker_swarm_default_addr_pools is sequence
+          - docker_swarm_default_addr_pools is not string
+          - docker_swarm_default_addr_pools is not mapping
+          - >-
+            docker_swarm_default_addr_pool_mask_length is none or
+            (docker_swarm_default_addr_pools | length > 0 and
+             docker_swarm_default_addr_pool_mask_length is integer and
+             1 <= docker_swarm_default_addr_pool_mask_length <= 32)
+        fail_msg: Specify a list of overlay pools and an optional integer subnet prefix length.
+      run_once: true
+
+    - name: Validate the daemon configuration variable
+      ansible.builtin.assert:
+        that:
+          - docker_swarm_daemon_config is mapping
+          - >-
+            'data-root' not in docker_swarm_daemon_config or
+            (docker_swarm_daemon_config['data-root'] is string and
+             docker_swarm_daemon_config['data-root'].startswith('/'))
+        fail_msg: Set docker_swarm_daemon_config to a YAML mapping of dockerd options.
+      when: docker_swarm_daemon_config is defined
+
+    - name: Apply Docker and Swarm configuration
+      when: not ansible_check_mode
+      block:
+        - name: Install and start Docker Engine
+          ansible.builtin.import_tasks: install.yml
+
+        - name: Configure Swarm membership
+          ansible.builtin.import_tasks: swarm.yml

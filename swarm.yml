@@ -1,0 +1,10 @@
+---
+- name: Install Docker and converge the Swarm
+  hosts: docker_swarm:docker_swarm_managers:docker_swarm_workers
+  gather_facts: false
+  strategy: linear
+  any_errors_fatal: true
+  vars:
+    docker_swarm_bootstrap_host: swarm-m1
+  roles:
+    - docker_swarm

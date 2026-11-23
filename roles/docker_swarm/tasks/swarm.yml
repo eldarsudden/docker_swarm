@@ -1,0 +1,121 @@
+---
+- name: Read local Swarm state
+  ansible.builtin.raw: "{{ _docker_swarm_cli }} info --format {{ _docker_swarm_node_format | quote }}"
+  register: _docker_swarm_info
+  changed_when: false
+  until: _docker_swarm_info.rc == 0
+  retries: 15
+  delay: 2
+
+- name: Record local Swarm state and requested role
+  ansible.builtin.set_fact:
+    _docker_swarm_state: "{{ _docker_swarm_info.stdout.split() | first }}"
+    _docker_swarm_expected_role: "{{ 'manager' if inventory_hostname in _docker_swarm_managers else 'worker' }}"
+
+- name: Validate local Swarm state
+  ansible.builtin.assert:
+    that:
+      - _docker_swarm_state in ['inactive', 'active']
+      - _docker_swarm_state != 'active' or _docker_swarm_info.stdout.split() | length == 2
+    fail_msg: "{{ inventory_hostname }} has unexpected Swarm state {{ _docker_swarm_info.stdout | trim }}."
+
+- name: Require all inventory members to be inactive before initializing a new Swarm
+  ansible.builtin.assert:
+    that:
+      - docker_swarm_allow_init | bool
+      - _docker_swarm_members | difference(ansible_play_batch) | length == 0
+      - ansible_play_batch | map('extract', hostvars, '_docker_swarm_state') | reject('equalto', 'inactive') | list | length == 0
+    fail_msg: >-
+      The bootstrap manager is inactive. For a new cluster, explicitly pass
+      docker_swarm_allow_init=true and include all inventory members in the inactive
+      state. For an existing cluster, choose an active manager.
+  when: hostvars[docker_swarm_bootstrap_host]._docker_swarm_state == 'inactive'
+  run_once: true
+
+- name: Initialize Swarm on the bootstrap manager
+  ansible.builtin.raw: >-
+    {{ _docker_swarm_cli }} swarm init {{ _docker_swarm_network_flags }}
+    {% for pool in docker_swarm_default_addr_pools %}
+    --default-addr-pool={{ pool | quote }}
+    {% endfor %}
+    {% if docker_swarm_default_addr_pool_mask_length is not none %}
+    --default-addr-pool-mask-length={{ docker_swarm_default_addr_pool_mask_length }}
+    {% endif %}
+    >/dev/null
+  when:
+    - inventory_hostname == docker_swarm_bootstrap_host
+    - _docker_swarm_state == 'inactive'
+
+- name: Read the bootstrap manager's advertised endpoint
+  ansible.builtin.raw: >-
+    {{ _docker_swarm_cli }} node inspect self --format {{ _docker_swarm_manager_format | quote }}
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  run_once: true
+  register: _docker_swarm_endpoint
+  changed_when: false
+  until: _docker_swarm_endpoint.rc == 0 and _docker_swarm_endpoint.stdout | trim | length > 0
+  retries: 15
+  delay: 2
+
+- name: Find existing Swarm members by node ID
+  ansible.builtin.raw: >-
+    {{ _docker_swarm_cli }} node inspect
+    {{ _docker_swarm_info.stdout.split()[1] | quote }} --format {{ _docker_swarm_role_format | quote }}
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  register: _docker_swarm_existing_node
+  changed_when: false
+  failed_when: false
+  when: _docker_swarm_state == 'active'
+
+- name: Validate existing Swarm membership and role
+  ansible.builtin.assert:
+    that:
+      - _docker_swarm_existing_node.rc == 0
+      - _docker_swarm_existing_node.stdout | trim == _docker_swarm_expected_role
+    fail_msg: >-
+      {{ inventory_hostname }} is already in Swarm. Its node ID and role must match the
+      cluster on {{ docker_swarm_bootstrap_host }} and the inventory role
+      {{ _docker_swarm_expected_role }}. Docker reported:
+      {{ _docker_swarm_existing_node.stdout | trim }} {{ _docker_swarm_existing_node.stderr | trim }}
+  when: _docker_swarm_state == 'active'
+
+- name: Join additional managers before workers
+  ansible.builtin.include_tasks: join.yml
+  when:
+    - _docker_swarm_state == 'inactive'
+    - inventory_hostname != docker_swarm_bootstrap_host
+    - _docker_swarm_expected_role == 'manager'
+
+- name: Join workers
+  ansible.builtin.include_tasks: join.yml
+  when:
+    - _docker_swarm_state == 'inactive'
+    - _docker_swarm_expected_role == 'worker'
+
+- name: Read the Swarm node ID after initialization or join
+  ansible.builtin.raw: "{{ _docker_swarm_cli }} info --format {{ _docker_swarm_node_format | quote }}"
+  register: _docker_swarm_joined_node
+  changed_when: false
+  until:
+    - _docker_swarm_joined_node.rc == 0
+    - _docker_swarm_joined_node.stdout.split() | length == 2
+    - _docker_swarm_joined_node.stdout.split()[0] == 'active'
+  retries: 15
+  delay: 2
+  when: _docker_swarm_state == 'inactive'
+
+- name: Wait until the manager sees each Swarm node as ready
+  ansible.builtin.raw: >-
+    {{ _docker_swarm_cli }} node inspect
+    {{ _docker_swarm_node_id | quote }} --format {{ _docker_swarm_status_format | quote }}
+  vars:
+    _docker_swarm_node_id: >-
+      {{ (_docker_swarm_joined_node if _docker_swarm_state == 'inactive' else _docker_swarm_info).stdout.split()[1] }}
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  register: _docker_swarm_node_status
+  changed_when: false
+  until: >-
+    _docker_swarm_node_status.rc == 0 and
+    _docker_swarm_node_status.stdout.split() == [_docker_swarm_expected_role, 'ready']
+  retries: 15
+  delay: 2

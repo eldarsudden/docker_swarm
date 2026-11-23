@@ -1,0 +1,28 @@
+---
+_docker_swarm_members: >-
+  {{ (groups.get('docker_swarm', []) + groups.get('docker_swarm_managers', []) +
+      groups.get('docker_swarm_workers', [])) | unique | list }}
+_docker_swarm_explicit_hosts: >-
+  {{ _docker_swarm_members | map('extract', hostvars) |
+     selectattr('docker_swarm_node_role', 'defined') | list }}
+_docker_swarm_implicit_hosts: >-
+  {{ _docker_swarm_members | reject('in', _docker_swarm_explicit_hosts | map(attribute='inventory_hostname') | list) | list }}
+_docker_swarm_managers: >-
+  {{ (_docker_swarm_explicit_hosts | selectattr('docker_swarm_node_role', 'equalto', 'manager') |
+      map(attribute='inventory_hostname') | list) +
+     (_docker_swarm_implicit_hosts | select('in', groups.get('docker_swarm_managers', [])) | list) }}
+_docker_swarm_workers: >-
+  {{ (_docker_swarm_explicit_hosts | selectattr('docker_swarm_node_role', 'equalto', 'worker') |
+      map(attribute='inventory_hostname') | list) +
+     (_docker_swarm_implicit_hosts | select('in', groups.get('docker_swarm_workers', [])) | list) }}
+_docker_swarm_cli: docker --host unix:///var/run/docker.sock
+_docker_swarm_node_format: !unsafe '{{.Swarm.LocalNodeState}} {{.Swarm.NodeID}}'
+_docker_swarm_role_format: !unsafe '{{.Spec.Role}}'
+_docker_swarm_status_format: !unsafe '{{.Spec.Role}} {{.Status.State}}'
+_docker_swarm_manager_format: !unsafe '{{.ManagerStatus.Addr}}'
+_docker_swarm_network_flags: >-
+  --advertise-addr={{ docker_swarm_advertise_addr | quote }}
+  --listen-addr={{ docker_swarm_listen_addr | quote }}
+  {% if docker_swarm_data_path_addr %}
+  --data-path-addr={{ docker_swarm_data_path_addr | quote }}
+  {% endif %}

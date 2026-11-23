@@ -1,0 +1,14 @@
+---
+# Inventory hostname of the manager used to initialize or access the cluster.
+docker_swarm_bootstrap_host: "{{ (_docker_swarm_managers | first) | default('') }}"
+
+# Set per host to its IP address or interface name on the Swarm network.
+docker_swarm_advertise_addr: ""
+docker_swarm_listen_addr: "0.0.0.0:2377"
+docker_swarm_data_path_addr: ""
+
+docker_swarm_allow_init: false
+docker_swarm_default_addr_pools: []
+docker_swarm_default_addr_pool_mask_length: null
+docker_swarm_backup_dir: /var/backups/docker-swarm
+docker_swarm_allow_single_manager_outage: false

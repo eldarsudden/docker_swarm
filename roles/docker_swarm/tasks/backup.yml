@@ -1,0 +1,64 @@
+---
+- name: Require exactly one Swarm manager for the backup
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts_all | length == 1
+      - inventory_hostname in _docker_swarm_managers
+      - docker_swarm_backup_dir is string
+      - docker_swarm_backup_dir.startswith('/')
+      - docker_swarm_backup_dir != '/'
+    fail_msg: Select one manager with --limit and use an absolute backup directory.
+  run_once: true
+
+- name: Back up the Swarm state and bring the manager back online
+  ansible.builtin.raw: |
+    set -eu
+    {{ lookup('template', 'swarm-maintenance.sh.j2') }}
+    local_state=$(swarm_local_state)
+    read -r state control node_id <<EOF
+    $local_state
+    EOF
+    if [ "$state" != active ] || [ "$control" != true ] || [ -z "$node_id" ]; then
+      echo "Run the backup on an active Swarm manager." >&2
+      exit 1
+    fi
+
+    data_root=$(swarm_data_root)
+    state_dir=$(readlink -m -- "$data_root/swarm")
+    backup_dir=$(readlink -m -- {{ docker_swarm_backup_dir | quote }})
+    case "$backup_dir/" in
+      "$state_dir/"*) echo "Select a backup directory outside the Swarm state." >&2; exit 1 ;;
+    esac
+    test -d "$state_dir"
+    umask 077
+    mkdir -p -- "$backup_dir"
+    stage=$(mktemp -d -- "$backup_dir/.swarm.XXXXXXXX")
+    restart=false
+    cleanup() {
+      status=$?
+      if [ "$restart" = true ]; then
+        systemctl start docker.service && swarm_wait_for_manager "$node_id" || status=1
+      fi
+      rm -rf -- "$stage"
+      exit "$status"
+    }
+    trap cleanup EXIT
+
+    swarm_manager_can_stop "$node_id" {{ docker_swarm_allow_single_manager_outage | bool | ternary('true', 'false') }}
+    restart=true
+    systemctl stop docker.service docker.socket
+    tar --create --gzip --file="$stage/swarm.tar.gz" --directory="$data_root" swarm
+    tar --list --gzip --file="$stage/swarm.tar.gz" >/dev/null
+    archive="$backup_dir/swarm-$(date -u +%Y%m%dT%H%M%SZ)-${stage##*.}.tar.gz"
+    mv -T -- "$stage/swarm.tar.gz" "$archive"
+    printf 'Swarm backup: %s\n' "$archive"
+    systemctl start docker.service
+    restart=false
+    swarm_wait_for_manager "$node_id"
+  register: _docker_swarm_backup
+  when: not ansible_check_mode
+
+- name: Show the Swarm backup location
+  ansible.builtin.debug:
+    msg: "{{ _docker_swarm_backup.stdout | trim }}"
+  when: not ansible_check_mode
