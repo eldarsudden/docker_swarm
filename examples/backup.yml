@@ -6,5 +6,5 @@
   tasks:
     - name: Run the Docker Swarm backup
       ansible.builtin.import_role:
-        name: docker_swarm
+        name: "{{ playbook_dir }}/../roles/docker_swarm"
         tasks_from: backup

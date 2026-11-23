@@ -6,8 +6,8 @@ The role works with Ansible 2.10 or later and requires no external collections. 
 
 ## Prerequisites
 
-1. Edit the `docker_swarm` group in `inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set the shared Swarm interface in the group variables and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker` to each host. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
-2. Set `docker_swarm_bootstrap_host` in `swarm.yml` to a manager's inventory name. The examples use `swarm-m1`. For an existing cluster, choose a reachable manager that already belongs to that Swarm.
+1. Edit the `docker_swarm` group in `examples/inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set the shared Swarm interface in the group variables and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker` to each host. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
+2. Set `docker_swarm_bootstrap_host` in `examples/swarm.yml` to a manager's inventory name. The examples use `swarm-m1`. For an existing cluster, choose a reachable manager that already belongs to that Swarm.
 3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the operating system and Docker repositories.
 4. Allow `2377/tcp` to managers, plus `7946/tcp`, `7946/udp`, and `4789/udp` between Swarm nodes. Encrypted overlay networks also need IP protocol 50 (ESP). Limit access to the cluster network. [Swarm network requirements](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
 
@@ -15,10 +15,12 @@ Run the examples from the repository root. Use `-u` to select an SSH user and `-
 
 | Path | Purpose |
 |---|---|
-| `inventory.yml` | Example inventory with managers, a worker, and shared settings. |
-| `swarm.yml` | Installs Docker CE, applies `daemon.json`, and joins nodes to the Swarm. |
-| `backup.yml` | Backs up Swarm state on one manager. |
-| `roles/docker_swarm/` | Role used by both playbooks. |
+| [`examples/inventory.yml`](examples/inventory.yml) | Swarm inventory with managers, a worker, and shared settings. |
+| [`examples/swarm.yml`](examples/swarm.yml) | Installs Docker CE, applies `daemon.json`, and joins nodes to the Swarm. |
+| [`examples/backup.yml`](examples/backup.yml) | Backs up Swarm state on one manager. |
+| [`examples/docker-inventory.yml`](examples/docker-inventory.yml) | Inventory for standalone Docker hosts. |
+| [`examples/docker.yml`](examples/docker.yml) | Installs and configures Docker without creating a Swarm. |
+| [`roles/docker_swarm/`](roles/docker_swarm/) | Role used by the example playbooks. |
 
 The role also supports the `docker_swarm_managers` and `docker_swarm_workers` inventory groups. A host's explicit `docker_swarm_node_role` takes precedence. If the role of an existing node differs from the inventory, the play fails. Promote or demote the node using Swarm before reconciling its inventory entry.
 
@@ -29,8 +31,8 @@ Use one inventory per cluster. Run the role in a single play with `strategy: lin
 ### Check the inventory
 
 ```bash
-ansible-playbook -i inventory.yml swarm.yml --list-hosts
-ansible-playbook -i inventory.yml swarm.yml --check
+ansible-playbook -i examples/inventory.yml examples/swarm.yml --list-hosts
+ansible-playbook -i examples/inventory.yml examples/swarm.yml --check
 ```
 
 The first command lists the selected hosts. Check mode validates inventory groups, roles, and variables on the control node. Checking Docker state and network connectivity requires a normal run.
@@ -40,7 +42,7 @@ The first command lists the selected hosts. Check mode validates inventory group
 Run the play against every host in the inventory. Pass the initialization flag for this run.
 
 ```bash
-ansible-playbook -i inventory.yml swarm.yml -e '{"docker_swarm_allow_init":true}'
+ansible-playbook -i examples/inventory.yml examples/swarm.yml -e '{"docker_swarm_allow_init":true}'
 ```
 
 On a manager, confirm that the nodes have the expected roles and show `Ready`.
@@ -54,12 +56,12 @@ sudo docker node ls
 Update `docker_swarm_daemon_config` in the inventory and run the playbook. The same command checks idempotence. Expect `changed=0` on a healthy cluster with unchanged settings.
 
 ```bash
-ansible-playbook -i inventory.yml swarm.yml
+ansible-playbook -i examples/inventory.yml examples/swarm.yml
 ```
 
 ### Add a worker to an existing cluster
 
-Add an entry under `all.children.docker_swarm.hosts` in `inventory.yml` and replace the example hostname. The worker inherits the Swarm interface from the group.
+Add an entry under `all.children.docker_swarm.hosts` in `examples/inventory.yml` and replace the example hostname. The worker inherits the Swarm interface from the group.
 
 ```yaml
 swarm-w2:
@@ -69,45 +71,17 @@ swarm-w2:
 Include the configured bootstrap manager and the new host in the run. To add a manager, set `docker_swarm_node_role: manager` on the new host and use its name in `--limit`.
 
 ```bash
-ansible-playbook -i inventory.yml swarm.yml --limit swarm-m1,swarm-w2
+ansible-playbook -i examples/inventory.yml examples/swarm.yml --limit swarm-m1,swarm-w2
 ```
 
 ### Install Docker without creating a Swarm
 
 Use the role's `install` entry point to install Docker CE, optionally apply `daemon.json`, and enable and start `docker.service`. This entry point requires neither `docker_swarm_node_role` nor `docker_swarm_advertise_addr`.
 
-Create `docker-inventory.yml` and replace `docker-1.example.com` with a hostname or SSH alias. Omit the `docker_swarm_daemon_config` mapping if you want to manage `daemon.json` separately.
-
-```yaml
-docker_hosts:
-  hosts:
-    docker-1.example.com:
-  vars:
-    docker_swarm_daemon_config:
-      log-driver: json-file
-      log-opts:
-        max-size: "100m"
-        max-file: "5"
-```
-
-Create `docker.yml` in the repository root.
-
-```yaml
----
-- name: Install and configure Docker CE
-  hosts: docker_hosts
-  gather_facts: false
-  strategy: linear
-  become: true
-  tasks:
-    - name: Run Docker installation and configuration
-      ansible.builtin.import_role:
-        name: docker_swarm
-        tasks_from: install
-```
+Replace `docker-1.example.com` with a hostname or SSH alias in [`examples/docker-inventory.yml`](examples/docker-inventory.yml). Omit `docker_swarm_daemon_config` if you manage `daemon.json` separately. The [example playbook](examples/docker.yml) calls `tasks_from: install`.
 
 ```bash
-ansible-playbook -i docker-inventory.yml docker.yml
+ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
 ```
 
 ## Variables
@@ -212,13 +186,13 @@ The role applies changes one host at a time. Before restarting an active manager
 Select exactly one active manager. The archive is saved on that manager under `/var/backups/docker-swarm` by default.
 
 ```bash
-ansible-playbook -i inventory.yml backup.yml --limit swarm-m1
+ansible-playbook -i examples/inventory.yml examples/backup.yml --limit swarm-m1
 ```
 
 To change the archive location, pass an absolute path on the manager.
 
 ```bash
-ansible-playbook -i inventory.yml backup.yml --limit swarm-m1 \
+ansible-playbook -i examples/inventory.yml examples/backup.yml --limit swarm-m1 \
   -e docker_swarm_backup_dir=/srv/backups/docker-swarm
 ```
 
