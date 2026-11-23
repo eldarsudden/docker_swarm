@@ -1,64 +1,65 @@
-# Docker Swarm для Enterprise Linux 9 и 10
+# Docker Swarm for Enterprise Linux 9 and 10
 
-Роль `docker_swarm` устанавливает Docker CE, запускает `docker.service` и собирает Swarm из узлов инвентаря. Поддерживаемые системы — RHEL, Oracle Linux, AlmaLinux, Rocky Linux и CentOS Stream версий 9 и 10, на `x86_64` и `aarch64`. Для каждой системы используется её стабильный RPM-репозиторий Docker с проверкой подписей пакетов.
+The `docker_swarm` role installs Docker CE, enables and starts `docker.service`, and forms a Swarm from the inventory. It supports RHEL, Oracle Linux, AlmaLinux, Rocky Linux, and CentOS Stream 9 and 10 on `x86_64` and `aarch64`. It uses Docker's stable RPM repository for each distribution and enables package signature verification.
 
-Роль работает с Ansible 2.10+ без внешних коллекций. Удалённые команды выполняются через `ansible.builtin.raw` и встроенный в роль action-плагин. Python требуется только на управляющей машине. Для Ansible 2.10 можно использовать Python 3.9 и Jinja2 3.0. [Матрица совместимости Ansible](https://docs.ansible.com/projects/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix)
+The role works with Ansible 2.10 or later and requires no external collections. Remote tasks use `ansible.builtin.raw` and an action plugin bundled with the role. Only the control node needs Python. Ansible 2.10 can run with Python 3.9 and Jinja2 3.0. [Ansible support matrix](https://docs.ansible.com/projects/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix)
 
-## Подготовка
+## Prerequisites
 
-1. В группе `docker_swarm` в `inventory.yml` укажите адреса SSH, адреса Swarm и `docker_swarm_node_role: manager` или `worker` для каждого узла. Для высокой доступности Docker рекомендует три или пять менеджеров. [Руководство Docker по менеджерам](https://docs.docker.com/engine/swarm/admin_guide/)
-2. В `swarm.yml` укажите имя начального менеджера из инвентаря. В примерах используется `swarm-m1`. Для существующего кластера выберите доступного действующего менеджера.
-3. Проверьте, что SSH-пользователь может выполнять команды через `sudo`, узлам доступны репозитории ОС и Docker, а межсетевые экраны пропускают трафик Swarm. Для стандартных адресов нужны `2377/tcp` к менеджерам, `7946/tcp`, `7946/udp` и `4789/udp` между узлами. Для зашифрованных overlay-сетей также нужен IP-протокол 50 (ESP). Правила следует ограничить сетью кластера. [Требования к сети Docker Swarm](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
+1. Edit the `docker_swarm` group in `inventory.yml`. Set the SSH and Swarm addresses for each host and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker`. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
+2. Set `docker_swarm_bootstrap_host` in `swarm.yml` to a manager's inventory name. The examples use `swarm-m1`. For an existing cluster, choose a reachable manager that already belongs to that Swarm.
+3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the operating system and Docker repositories.
+4. Allow `2377/tcp` to managers, plus `7946/tcp`, `7946/udp`, and `4789/udp` between Swarm nodes. Encrypted overlay networks also need IP protocol 50 (ESP). Limit access to the cluster network. [Swarm network requirements](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
 
-Выполняйте команды из корня репозитория. При необходимости укажите SSH-пользователя через `-u`, а для запроса пароля `sudo` добавьте `-K`.
+Run the examples from the repository root. Use `-u` to select an SSH user and `-K` if `sudo` requires a password.
 
-| Путь | Назначение |
+| Path | Purpose |
 |---|---|
-| `inventory.yml` | Пример инвентаря с менеджерами, воркером и общими настройками. |
-| `swarm.yml` | Установка Docker CE, настройка `daemon.json` и присоединение узлов к Swarm. |
-| `backup.yml` | Резервное копирование состояния Swarm на одном менеджере. |
-| `roles/docker_swarm/` | Роль, которую используют оба playbook. |
+| `inventory.yml` | Example inventory with managers, a worker, and shared settings. |
+| `swarm.yml` | Installs Docker CE, applies `daemon.json`, and joins nodes to the Swarm. |
+| `backup.yml` | Backs up Swarm state on one manager. |
+| `roles/docker_swarm/` | Role used by both playbooks. |
 
-Существующие группы `docker_swarm_managers` и `docker_swarm_workers` также поддерживаются. Если для хоста задана `docker_swarm_node_role`, она определяет его желаемую роль. Изменение этой переменной у уже присоединённого узла вызывает ошибку проверки. Повышение или понижение роли действующего узла выполняется отдельной операцией Swarm.
+The role also supports the `docker_swarm_managers` and `docker_swarm_workers` inventory groups. A host's explicit `docker_swarm_node_role` takes precedence. If the role of an existing node differs from the inventory, the play fails. Promote or demote the node using Swarm before reconciling its inventory entry.
 
-Роль запускается в одном play со стратегией `linear`, без `serial` и с `gather_facts: false`. Один инвентарь описывает один кластер.
+Use one inventory per cluster. Run the role in a single play with `strategy: linear` and `gather_facts: false`, without batching hosts with `serial`.
 
-## Примеры запуска
+## Usage
 
-### Проверить инвентарь
+### Check the inventory
 
 ```bash
 ansible-playbook -i inventory.yml swarm.yml --list-hosts
 ansible-playbook -i inventory.yml swarm.yml --check
 ```
 
-Первая команда показывает выбранные узлы. Вторая проверяет группы, роли и параметры на управляющей машине. Проверка состояния Docker и связности сети требует обычного прогона.
+The first command lists the selected hosts. Check mode validates inventory groups, roles, and variables on the control node. Checking Docker state and network connectivity requires a normal run.
 
-### Создать новый кластер
+### Create a cluster
 
-Запустите play для всех узлов инвентаря. Разрешение на инициализацию задаётся для этого запуска.
+Run the play against every host in the inventory. Pass the initialization flag for this run.
 
 ```bash
 ansible-playbook -i inventory.yml swarm.yml -e '{"docker_swarm_allow_init":true}'
 ```
 
-На менеджере проверьте, что узлы видны с нужными ролями и имеют статус `Ready`.
+On a manager, confirm that the nodes have the expected roles and show `Ready`.
 
 ```bash
 sudo docker node ls
 ```
 
-### Повторить запуск или применить изменения daemon.json
+### Rerun the role or update daemon.json
 
-Обновите `docker_swarm_daemon_config` в инвентаре и выполните обычный запуск. Этой же командой проверяется идемпотентность. При неизменных параметрах и исправном кластере ожидается `changed=0`.
+Update `docker_swarm_daemon_config` in the inventory and run the playbook. The same command checks idempotence. Expect `changed=0` on a healthy cluster with unchanged settings.
 
 ```bash
 ansible-playbook -i inventory.yml swarm.yml
 ```
 
-### Добавить воркер в существующий кластер
+### Add a worker to an existing cluster
 
-Вставьте новую запись в `all.children.docker_swarm.hosts` в `inventory.yml` и замените демонстрационные адреса своими.
+Add an entry under `all.children.docker_swarm.hosts` in `inventory.yml` and replace the example addresses.
 
 ```yaml
 swarm-w2:
@@ -67,31 +68,31 @@ swarm-w2:
   docker_swarm_node_role: worker
 ```
 
-Включите в запуск выбранного действующего менеджера и новый узел. Для нового менеджера задайте `docker_swarm_node_role: manager` и укажите его имя в `--limit`.
+Include the configured bootstrap manager and the new host in the run. To add a manager, set `docker_swarm_node_role: manager` on the new host and use its name in `--limit`.
 
 ```bash
 ansible-playbook -i inventory.yml swarm.yml --limit swarm-m1,swarm-w2
 ```
 
-## Переменные
+## Variables
 
-| Переменная | По умолчанию | Назначение |
+| Variable | Default | Purpose |
 |---|---|---|
-| `docker_swarm_bootstrap_host` | Первый узел группы менеджеров | Имя хоста в инвентаре. Рекомендуется задать явно, как в примере. |
-| `docker_swarm_advertise_addr` | Обязательная для каждого узла | IP или имя интерфейса в сети Swarm. Порт можно указать как `10.0.0.11:2377`, для IPv6 с портом — `[2001:db8::11]:2377`. |
-| `docker_swarm_listen_addr` | `0.0.0.0:2377` | Адрес и порт прослушивания Swarm при инициализации или присоединении. |
-| `docker_swarm_data_path_addr` | Пусто | IP или интерфейс для overlay-трафика. По умолчанию Docker использует advertise-адрес. |
-| `docker_swarm_daemon_config` | Не задана | YAML-словарь параметров для `/etc/docker/daemon.json`. |
-| `docker_swarm_node_role` | По группе инвентаря | Желаемая роль хоста, `manager` или `worker`. |
-| `docker_swarm_allow_init` | `false` | Разрешение на создание нового Swarm для конкретного запуска. |
-| `docker_swarm_default_addr_pools` | `[]` | Список CIDR для overlay-сетей при первом `swarm init`. |
-| `docker_swarm_default_addr_pool_mask_length` | Docker использует `24` | Длина префикса отдельной overlay-сети при заданном пуле. |
-| `docker_swarm_backup_dir` | `/var/backups/docker-swarm` | Каталог на менеджере для архива состояния Swarm. |
-| `docker_swarm_allow_single_manager_outage` | `false` | Разрешает краткую остановку единственного менеджера в окне обслуживания. |
+| `docker_swarm_bootstrap_host` | First manager in the inventory | Inventory name of the manager used to initialize or access the cluster. |
+| `docker_swarm_advertise_addr` | Required for each host | Swarm IP address or interface name. Examples with a port include `10.0.0.11:2377` and `[2001:db8::11]:2377`. |
+| `docker_swarm_listen_addr` | `0.0.0.0:2377` | Swarm listen address and port for initialization or join. |
+| `docker_swarm_data_path_addr` | Empty | IP address or interface for overlay traffic. Docker defaults to the advertised address. |
+| `docker_swarm_daemon_config` | Unset | YAML mapping written to `/etc/docker/daemon.json`. |
+| `docker_swarm_node_role` | Inferred from legacy inventory groups | Desired host role, `manager` or `worker`. |
+| `docker_swarm_allow_init` | `false` | Explicitly allows cluster initialization for the current run. |
+| `docker_swarm_default_addr_pools` | `[]` | List of CIDRs for overlay networks, used at `swarm init`. |
+| `docker_swarm_default_addr_pool_mask_length` | Docker's default of `24` | Prefix length for each overlay subnet allocated from the configured pools. |
+| `docker_swarm_backup_dir` | `/var/backups/docker-swarm` | Directory on the manager for Swarm state archives. |
+| `docker_swarm_allow_single_manager_outage` | `false` | Allows a planned interruption when the cluster has one manager. |
 
-## Overlay-пулы
+## Overlay address pools
 
-При необходимости задайте параметры в `all.vars` до создания кластера.
+Set the optional pool parameters in `all.vars` before creating the cluster.
 
 ```yaml
 docker_swarm_default_addr_pools:
@@ -100,11 +101,13 @@ docker_swarm_default_addr_pools:
 docker_swarm_default_addr_pool_mask_length: 24
 ```
 
-Выберите диапазоны без пересечений с сетью хостов, VPN, локальными bridge-сетями и другими сетями, доступными контейнерам. Docker применяет эти параметры при инициализации Swarm. [Пулы адресов Swarm](https://docs.docker.com/engine/swarm/swarm-mode/#configuring-default-address-pools)
+Choose ranges that avoid overlaps with host networks, VPNs, local bridges, and other networks reachable from containers. Docker applies these settings when it initializes the Swarm. [Swarm address pools](https://docs.docker.com/engine/swarm/swarm-mode/#configuring-default-address-pools)
 
-## Настройка daemon.json
+## Configure daemon.json
 
-В `inventory.yml` есть закомментированный пример для `all.vars`. Параметр можно задать для всех узлов, отдельной группы или хоста. Задавайте полный словарь для выбранного уровня. Обычный приоритет переменных Ansible заменяет словарь при переопределении.
+**Use any Linux `daemon.json` option supported by the installed Docker Engine.** Put the exact Docker option names and values in `docker_swarm_daemon_config`. The role serializes the entire YAML mapping into JSON, preserving value types and nested structures. It has no allowlist of option names. Docker checks the generated file with `dockerd --validate` before the role replaces the current file. [Docker reference for Linux `daemon.json` options](https://docs.docker.com/reference/cli/dockerd/#on-linux)
+
+Set the mapping for all hosts, a group, or an individual host. Provide the full mapping at each level where you define it. With Ansible's default variable precedence, an override replaces the mapping. An unset variable leaves the file unmanaged. An empty mapping (`{}`) writes an empty JSON object.
 
 ```yaml
 all:
@@ -119,7 +122,7 @@ all:
       debug: false
 ```
 
-Из этого фрагмента получится такой `/etc/docker/daemon.json`.
+This example produces the following `/etc/docker/daemon.json`. Keep `log-opts` values as strings.
 
 ```json
 {
@@ -134,34 +137,31 @@ all:
 }
 ```
 
-Роль преобразует YAML в JSON с сохранением типов. Значения `log-opts` указывайте строками. При заданном словаре роль управляет всем файлом, а `{}` записывает пустой JSON-объект. Управление файлом включается наличием переменной.
+Use bridge subnets that fit your network before enabling `bip` or `fixed-cidr`. Docker rejects options that duplicate flags passed at startup. The stock Docker CE systemd unit sets `-H fd://`, so leave `hosts` out of the mapping when using that unit. On an active Swarm node, changing `data-root` requires a separate data migration. [Docker daemon configuration](https://docs.docker.com/reference/cli/dockerd/#daemon-configuration-file)
 
-Перед заменой файла роль проверяет конфигурацию через `dockerd --validate`. Docker запускается с новым файлом или перезапускается по одному узлу за раз. При ошибке перезапуска роль восстанавливает прежний файл и пытается вернуть запущенную службу. Диагностику запуска можно посмотреть через `journalctl -u docker.service`.
+The role applies changes one host at a time. Before restarting an active manager, it checks that a majority of managers will remain available. It waits for the restarted manager to report `Ready` and `Reachable` before moving to the next host. If the restart or readiness check fails, the role restores the previous file and attempts to recover the service. Check `journalctl -u docker.service` for service logs. Managers with autolock enabled require a separate maintenance procedure that includes unlocking. Run one maintenance playbook at a time for a given cluster.
 
-Перед остановкой действующего менеджера роль проверяет, что без него останется большинство доступных менеджеров. Следующий узел обрабатывается после возврата менеджера в `Ready` и `Reachable`. При включённом autolock требуется отдельная процедура обслуживания с разблокировкой. Изменение `data-root` на запущенном узле Swarm требует отдельной миграции данных. Запускайте обслуживание одного кластера последовательно, одним playbook за раз.
+## Rerun behavior
 
-Перед включением `bip` и `fixed-cidr` из примера проверьте, что подсеть Docker bridge подходит вашей сети. Штатный сервис Docker CE задаёт сокет флагом `-H fd://`. Для этого сервиса оставьте `hosts` вне JSON, поскольку Docker отклоняет настройки, продублированные во флагах. Пустые значения со скриншота можно опустить, чтобы Docker использовал свои настройки по умолчанию. [Параметры dockerd](https://docs.docker.com/reference/cli/dockerd/#daemon-configuration-file)
+- The role installs missing packages and enables Docker at boot. Resolve any conflicts that DNF reports with previously installed packages before retrying. [Docker RPM installation](https://docs.docker.com/engine/install/rhel/)
+- Initialization requires `docker_swarm_allow_init=true`, all inventory hosts in the play, and each host in the `inactive` state.
+- For an existing cluster, the selected manager verifies the IDs and roles of active nodes. The play stops if a node belongs to a different Swarm or its role differs from the inventory.
+- The role joins pending managers before workers and waits for selected nodes to report `Ready`. Ansible masks the output of token tasks, and SSH carries the join token over standard input.
+- Swarm address settings apply during initialization or join. Configure firewall rules separately.
 
-## Поведение при повторном прогоне
+## Back up Swarm state
 
-- Роль запускает установку только при отсутствии нужных пакетов и включает автозапуск Docker. Если DNF сообщает о конфликте с ранее установленными пакетами, его нужно разрешить до следующего запуска. [Инструкция Docker по установке RPM](https://docs.docker.com/engine/install/rhel/)
-- Инициализация разрешена при `docker_swarm_allow_init=true`, когда play включает все узлы инвентаря и каждый имеет статус `inactive`. При донастройке существующего кластера роль проверяет идентификаторы и роли активных узлов через выбранного менеджера.
-- Роль сначала присоединяет недостающих менеджеров, затем воркеров и ожидает статуса `Ready` у выбранных узлов. Ansible скрывает вывод задач с токенами, а токен передаётся по SSH через стандартный ввод.
-- Если активный узел состоит в другом Swarm или его роль расходится с инвентарём, выполнение останавливается. Настройки адресов используются в момент `init` и `join`. Правила межсетевого экрана задаются отдельно.
-
-## Резервное копирование
-
-Выберите ровно одного действующего менеджера. По умолчанию архив сохраняется на нём в `/var/backups/docker-swarm`.
+Select exactly one active manager. The archive is saved on that manager under `/var/backups/docker-swarm` by default.
 
 ```bash
 ansible-playbook -i inventory.yml backup.yml --limit swarm-m1
 ```
 
-Для сохранения в другом каталоге передайте абсолютный путь на менеджере.
+To change the archive location, pass an absolute path on the manager.
 
 ```bash
 ansible-playbook -i inventory.yml backup.yml --limit swarm-m1 \
   -e docker_swarm_backup_dir=/srv/backups/docker-swarm
 ```
 
-Playbook проверяет кворум, останавливает Docker и его systemd-сокет на выбранном менеджере, архивирует каталог `swarm` из фактического `DockerRootDir` и возвращает менеджер в `Ready` и `Reachable`. Путь к архиву выводится после прогона. Архив содержит ключи Swarm. Храните защищённую копию вне менеджера. Для восстановления сервисов с данными отдельно копируйте используемые тома и внешние хранилища. [Резервное копирование и восстановление Swarm](https://docs.docker.com/engine/swarm/admin_guide/#back-up-the-swarm)
+The playbook checks quorum, stops Docker and its systemd socket, archives the `swarm` directory under the active `DockerRootDir`, and brings the manager back to `Ready` and `Reachable`. It prints the archive path after the run. The archive contains Swarm keys. Keep a protected copy off the manager and back up application volumes and external storage separately. [Swarm backup and recovery](https://docs.docker.com/engine/swarm/admin_guide/#back-up-the-swarm)
