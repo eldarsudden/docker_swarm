@@ -1,0 +1,28 @@
+---
+- name: Read existing Swarm secret names
+  ansible.builtin.raw: >-
+    {{ _docker_swarm_cli }} secret ls --format {{ _docker_swarm_secret_name_format | quote }}
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  register: _docker_swarm_existing_secrets
+  changed_when: false
+  when: docker_swarm_secrets | length > 0
+
+- name: Create missing Swarm secrets
+  docker_swarm_stdin:
+    command: "{{ _docker_swarm_cli }} secret create {{ item.key | quote }} -"
+    stdin_base64: "{{ item.value | string | b64encode }}"
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  loop: "{{ docker_swarm_secrets | dict2items }}"
+  when: item.key not in _docker_swarm_existing_secrets.stdout.splitlines()
+  no_log: true
+
+- name: Deploy configured Docker stacks
+  docker_swarm_stdin:
+    command: "{{ _docker_swarm_cli }} stack deploy --compose-file - {{ item.key | quote }}"
+    stdin_base64: "{{ lookup('file', _docker_swarm_stack_file, rstrip=false) | b64encode }}"
+  vars:
+    _docker_swarm_stack_file: "{{ item.value if item.value.startswith('/') else playbook_dir ~ '/' ~ item.value }}"
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  loop: "{{ docker_swarm_stacks | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"

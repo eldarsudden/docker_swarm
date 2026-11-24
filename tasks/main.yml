@@ -64,6 +64,48 @@
         fail_msg: Set docker_swarm_daemon_config to a YAML mapping of dockerd options.
       when: docker_swarm_daemon_config is not none
 
+    - name: Validate the node labels mapping
+      ansible.builtin.assert:
+        that:
+          - docker_swarm_node_labels is mapping
+        fail_msg: Set docker_swarm_node_labels to a mapping of Swarm node labels.
+
+    - name: Validate Swarm node labels
+      ansible.builtin.assert:
+        that:
+          - item.key is string and item.key is match('^[^=\\s]+$')
+          - item.value is string or item.value is boolean or item.value is number
+        fail_msg: Use nonempty label names without spaces or equals signs and scalar label values.
+      loop: "{{ docker_swarm_node_labels | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Validate Swarm secrets and stacks mappings
+      ansible.builtin.assert:
+        that:
+          - docker_swarm_secrets is mapping
+          - docker_swarm_stacks is mapping
+        fail_msg: Set docker_swarm_secrets and docker_swarm_stacks to mappings.
+      run_once: true
+
+    - name: Validate Swarm secret entries
+      ansible.builtin.assert:
+        that:
+          - item.key is string and item.key is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+          - (item.value is string or item.value is vault_encrypted) and item.value | length > 0
+      loop: "{{ docker_swarm_secrets | dict2items }}"
+      no_log: true
+      run_once: true
+
+    - name: Validate Swarm stack entries
+      ansible.builtin.assert:
+        that:
+          - item.key is string and item.key is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+          - item.value is string and item.value | trim | length > 0
+        fail_msg: Set each stack name to a path to a Compose file on the control node.
+      loop: "{{ docker_swarm_stacks | dict2items }}"
+      run_once: true
+
     - name: Apply Docker and Swarm configuration
       when: not ansible_check_mode
       block:

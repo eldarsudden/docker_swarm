@@ -144,11 +144,71 @@ ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
 | `docker_swarm_data_path_addr` | Empty | IP address or interface for overlay traffic. Docker defaults to the advertised address. |
 | `docker_swarm_daemon_config` | Debug disabled, `json-file` with `100m` and `3` files | YAML mapping written to `/etc/docker/daemon.json`. |
 | `docker_swarm_node_role` | Inferred from legacy inventory groups | Desired host role, `manager` or `worker`. |
+| `docker_swarm_node_labels` | `{}` | Labels to add or update on a Swarm node. |
+| `docker_swarm_secrets` | `{}` | Swarm secret names mapped to their text values. |
+| `docker_swarm_stacks` | `{}` | Stack names mapped to Compose file paths on the Ansible control node. |
 | `docker_swarm_allow_init` | `false` | Explicitly allows cluster initialization for the current run. |
 | `docker_swarm_default_addr_pools` | `[]` | List of CIDRs for overlay networks, used at `swarm init`. |
 | `docker_swarm_default_addr_pool_mask_length` | Docker's default of `24` | Prefix length for each overlay subnet allocated from the configured pools. |
 | `docker_swarm_backup_dir` | `/var/backups/docker-swarm` | Directory on the manager for Swarm state archives. |
 | `docker_swarm_allow_single_manager_outage` | `false` | Allows a planned interruption when the cluster has one manager. |
+
+## Set Swarm node labels
+
+Set `docker_swarm_node_labels` on the host entry in the inventory.
+
+```yaml
+swarm-w1:
+  docker_swarm_node_role: worker
+  docker_swarm_node_labels:
+    minio4: true
+```
+
+The role applies the labels through the bootstrap manager after the node joins and reports `Ready`. Boolean values become the strings `true` and `false`. You can use the label as a service placement constraint. [Docker Swarm node labels](https://docs.docker.com/reference/cli/docker/node/update/#label-add)
+
+```yaml
+deploy:
+  placement:
+    constraints:
+      - node.labels.minio4==true
+```
+
+The role updates keys whose values differ and preserves other node labels.
+
+## Create secrets and deploy stacks
+
+Set these variables for the cluster in the inventory or play. Store real secret values in Ansible Vault.
+
+```yaml
+docker_swarm_secrets:
+  app_password_v1: "{{ vault_app_password }}"
+docker_swarm_stacks:
+  storage: stacks/storage.yml
+```
+
+In the Compose file, reference the Swarm secret by name and declare it as external.
+
+```yaml
+version: "3.8"
+services:
+  example:
+    image: busybox:1.36
+    command: ["sleep", "3600"]
+    secrets:
+      - source: app_password_v1
+        target: app_password
+    deploy:
+      placement:
+        constraints:
+          - node.labels.minio4==true
+secrets:
+  app_password_v1:
+    external: true
+```
+
+The role applies node labels before creating missing secrets and deploying stacks on the bootstrap manager. It keeps existing secrets by name. To rotate a secret, create a new name and update the Compose file to reference it. [Docker Swarm secrets](https://docs.docker.com/engine/swarm/secrets/#example-rotate-a-secret)
+
+Compose paths are absolute or relative to the playbook directory on the control node. The role sends the file over standard input to `docker stack deploy` on the manager. The manager must be able to read files used by the Compose loader, such as `env_file`. Bind-mount sources must exist on the nodes that run the service. Each run submits every configured stack and reports the deployment as changed. [Docker stack deploy](https://docs.docker.com/reference/cli/docker/stack/deploy/)
 
 ## Use an existing RPM repository
 

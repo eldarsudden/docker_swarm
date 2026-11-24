@@ -1,0 +1,21 @@
+---
+- name: Read current Swarm node labels
+  ansible.builtin.raw: >-
+    {{ _docker_swarm_cli }} node inspect
+    {{ _docker_swarm_node_id | quote }} --format {{ _docker_swarm_labels_format | quote }}
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  register: _docker_swarm_current_labels
+  changed_when: false
+
+- name: Add or update Swarm node labels
+  ansible.builtin.raw: >-
+    {{ _docker_swarm_cli }} node update
+    --label-add {{ (item.key ~ '=' ~ (item.value if item.value is string else item.value | to_json)) | quote }}
+    {{ _docker_swarm_node_id | quote }}
+  vars:
+    _docker_swarm_existing_labels: "{{ _docker_swarm_current_labels.stdout | from_json | default({}, true) }}"
+  delegate_to: "{{ docker_swarm_bootstrap_host }}"
+  loop: "{{ docker_swarm_node_labels | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: _docker_swarm_existing_labels.get(item.key) != (item.value if item.value is string else item.value | to_json)

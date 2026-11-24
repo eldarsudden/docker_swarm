@@ -108,9 +108,6 @@
   ansible.builtin.raw: >-
     {{ _docker_swarm_cli }} node inspect
     {{ _docker_swarm_node_id | quote }} --format {{ _docker_swarm_status_format | quote }}
-  vars:
-    _docker_swarm_node_id: >-
-      {{ (_docker_swarm_joined_node if _docker_swarm_state == 'inactive' else _docker_swarm_info).stdout.split()[1] }}
   delegate_to: "{{ docker_swarm_bootstrap_host }}"
   register: _docker_swarm_node_status
   changed_when: false
@@ -119,3 +116,12 @@
     _docker_swarm_node_status.stdout.split() == [_docker_swarm_expected_role, 'ready']
   retries: 15
   delay: 2
+
+- name: Manage configured Swarm node labels
+  ansible.builtin.include_tasks: labels.yml
+  when: docker_swarm_node_labels | length > 0
+
+- name: Manage Swarm secrets and deploy stacks
+  ansible.builtin.include_tasks: workloads.yml
+  run_once: true
+  when: docker_swarm_secrets | length > 0 or docker_swarm_stacks | length > 0

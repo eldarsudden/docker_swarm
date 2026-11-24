@@ -1,6 +1,9 @@
 ---
 # Optional inventory group override for automatic cluster membership detection.
 docker_swarm_inventory_group: ""
+docker_swarm_node_labels: {}
+docker_swarm_secrets: {}
+docker_swarm_stacks: {}
 
 # Manage the stable Docker CE repository used for package installation.
 docker_swarm_repo_enabled: true

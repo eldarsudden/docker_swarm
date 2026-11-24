@@ -29,8 +29,12 @@ _docker_swarm_workers: >-
 _docker_swarm_cli: docker --host unix:///var/run/docker.sock
 _docker_swarm_node_format: !unsafe '{{.Swarm.LocalNodeState}} {{.Swarm.NodeID}}'
 _docker_swarm_role_format: !unsafe '{{.Spec.Role}}'
+_docker_swarm_labels_format: !unsafe '{{json .Spec.Labels}}'
+_docker_swarm_secret_name_format: !unsafe '{{.Name}}'
 _docker_swarm_status_format: !unsafe '{{.Spec.Role}} {{.Status.State}}'
 _docker_swarm_manager_format: !unsafe '{{.ManagerStatus.Addr}}'
+_docker_swarm_node_id: >-
+  {{ (_docker_swarm_joined_node if _docker_swarm_state == 'inactive' else _docker_swarm_info).stdout.split()[1] }}
 _docker_swarm_network_flags: >-
   --advertise-addr={{ docker_swarm_advertise_addr | quote }}
   --listen-addr={{ docker_swarm_listen_addr | quote }}
