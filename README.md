@@ -29,7 +29,7 @@ Reference the role by name in your playbook.
 ## Prerequisites
 
 1. Edit the `docker_swarm` group in `examples/inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set the shared Swarm interface in the group variables and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker` to each host. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
-2. Set `docker_swarm_bootstrap_host` in `examples/swarm.yml` to a manager's inventory name. The examples use `swarm-m1`. For an existing cluster, choose a reachable manager that already belongs to that Swarm.
+2. The role defaults to the first detected manager. To select a specific manager, set `docker_swarm_bootstrap_host` to its exact name under `hosts` in the inventory. For an existing cluster, select a reachable manager that already belongs to that Swarm.
 3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the operating system and Docker repositories.
 4. Allow `2377/tcp` to managers, plus `7946/tcp`, `7946/udp`, and `4789/udp` between Swarm nodes. Encrypted overlay networks also need IP protocol 50 (ESP). Limit access to the cluster network. [Swarm network requirements](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
 
@@ -65,6 +65,8 @@ ansible-playbook -i examples/inventory.yml examples/swarm.yml --check
 ```
 
 The first command lists the selected hosts. Check mode validates inventory groups, roles, and variables on the control node. Checking Docker state and network connectivity requires a normal run.
+
+If bootstrap manager validation fails, compare `docker_swarm_bootstrap_host` with the detected managers printed in the error. An empty manager list means the role found no host marked `docker_swarm_node_role: manager` in the Swarm groups and no manager from the legacy `docker_swarm_managers` group.
 
 ### Create a cluster
 

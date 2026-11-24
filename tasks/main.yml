@@ -3,10 +3,21 @@
   become: true
   any_errors_fatal: true
   block:
-    - name: Validate Swarm inventory and play batch
+    - name: Validate the Swarm bootstrap manager
       ansible.builtin.assert:
         that:
           - docker_swarm_bootstrap_host in _docker_swarm_managers
+        fail_msg: >-
+          docker_swarm_bootstrap_host={{ docker_swarm_bootstrap_host | to_json }}
+          must match the inventory hostname of a detected Swarm manager.
+          Detected managers: {{ _docker_swarm_managers | to_json }}.
+          Set docker_swarm_node_role to manager on a host in docker_swarm,
+          or use the docker_swarm_managers group.
+      run_once: true
+
+    - name: Validate Swarm inventory and play batch
+      ansible.builtin.assert:
+        that:
           - docker_swarm_bootstrap_host in ansible_play_batch
           - _docker_swarm_managers | intersect(_docker_swarm_workers) | length == 0
           - _docker_swarm_members | difference(_docker_swarm_managers + _docker_swarm_workers) | length == 0

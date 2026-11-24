@@ -4,7 +4,5 @@
   gather_facts: false
   strategy: linear
   any_errors_fatal: true
-  vars:
-    docker_swarm_bootstrap_host: swarm-m1
   roles:
     - role: docker_swarm
