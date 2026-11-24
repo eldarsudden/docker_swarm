@@ -57,20 +57,20 @@ Include every Swarm member when creating the cluster. For an existing cluster, `
 
 ### Use an existing inventory group
 
-Set `docker_swarm_inventory_group` in the play to use an existing group as the cluster membership. Assign `docker_swarm_node_role: manager` or `worker` to each host in that group.
+Target your existing group in the play and assign `docker_swarm_node_role: manager` or `worker` to each Swarm host in the inventory.
 
 ```yaml
 ---
 - name: Install Docker and configure Swarm
   hosts: minio
   gather_facts: false
-  vars:
-    docker_swarm_inventory_group: minio
   roles:
     - role: docker_swarm
 ```
 
-For backups with this inventory, also target `minio` and set `docker_swarm_inventory_group: minio` in the backup play. Use `--limit` to select one manager.
+For plays targeting the standard Swarm groups, the role uses those groups. For other plays, it discovers every host with `docker_swarm_node_role` in the inventory. This lets the role check that a first-time bootstrap includes every member, even when the command uses `--limit`. If one inventory contains several clusters with explicit node roles, set `docker_swarm_inventory_group` in the play to select the group for this cluster.
+
+For backups with this inventory, target `minio` in the backup play and use `--limit` to select one manager.
 
 ## Usage
 
@@ -83,7 +83,7 @@ ansible-playbook -i examples/inventory.yml examples/swarm.yml --check
 
 The first command lists the selected hosts. Check mode validates inventory groups, roles, and variables on the control node. Checking Docker state and network connectivity requires a normal run.
 
-If bootstrap manager validation fails, compare `docker_swarm_bootstrap_host` with the detected managers printed in the error. An empty manager list means the role found no host marked `docker_swarm_node_role: manager` in the Swarm groups and no manager from the legacy `docker_swarm_managers` group.
+If bootstrap manager validation fails, compare `docker_swarm_bootstrap_host` with the detected managers printed in the error. If the list is empty, check that a cluster member has `docker_swarm_node_role: manager` or belongs to the legacy `docker_swarm_managers` group.
 
 ### Create a cluster
 
@@ -136,7 +136,7 @@ ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `docker_swarm_inventory_group` | `docker_swarm` | Inventory group that defines the cluster. The default also includes the legacy manager and worker groups. |
+| `docker_swarm_inventory_group` | Automatic | Optional inventory group that defines this cluster when one inventory contains multiple clusters. An explicit `docker_swarm` also includes the legacy manager and worker groups. |
 | `docker_swarm_bootstrap_host` | First manager in the inventory | Inventory name of the manager used to initialize or access the cluster. |
 | `docker_swarm_advertise_addr` | Required, inherited from the group or set per host | Swarm interface name or IP address. Examples with a port include `10.0.0.11:2377` and `[2001:db8::11]:2377`. |
 | `docker_swarm_listen_addr` | `0.0.0.0:2377` | Swarm listen address and port for initialization or join. |
