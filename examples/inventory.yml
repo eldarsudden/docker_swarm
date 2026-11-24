@@ -9,7 +9,7 @@ all:
   #     log-driver: json-file
   #     log-opts:
   #       max-size: "100m"
-  #       max-file: "5"
+  #       max-file: "3"
   #     max-concurrent-downloads: 3
   #     max-concurrent-uploads: 5
   #     debug: false

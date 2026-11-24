@@ -7,6 +7,14 @@ docker_swarm_advertise_addr: ""
 docker_swarm_listen_addr: "0.0.0.0:2377"
 docker_swarm_data_path_addr: ""
 
+docker_swarm_daemon_config: "{{ _docker_swarm_default_daemon_config }}"
+_docker_swarm_default_daemon_config:
+  debug: false
+  log-driver: json-file
+  log-opts:
+    max-size: "100m"
+    max-file: "3"
+
 docker_swarm_allow_init: false
 docker_swarm_default_addr_pools: []
 docker_swarm_default_addr_pool_mask_length: null

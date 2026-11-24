@@ -50,7 +50,7 @@
             (docker_swarm_daemon_config['data-root'] is string and
              docker_swarm_daemon_config['data-root'].startswith('/'))
         fail_msg: Set docker_swarm_daemon_config to a YAML mapping of dockerd options.
-      when: docker_swarm_daemon_config is defined
+      when: docker_swarm_daemon_config is not none
 
     - name: Apply Docker and Swarm configuration
       when: not ansible_check_mode

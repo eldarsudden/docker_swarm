@@ -100,7 +100,7 @@ ansible-playbook -i examples/inventory.yml examples/swarm.yml --limit swarm-m1,s
 
 Use the role's `install` entry point to install Docker CE, optionally apply `daemon.json`, and enable and start `docker.service`. This entry point requires neither `docker_swarm_node_role` nor `docker_swarm_advertise_addr`.
 
-Replace `docker-1.example.com` with a hostname or SSH alias in [`examples/docker-inventory.yml`](examples/docker-inventory.yml). Omit `docker_swarm_daemon_config` if you manage `daemon.json` separately. The [example playbook](examples/docker.yml) calls `tasks_from: install`.
+Replace `docker-1.example.com` with a hostname or SSH alias in [`examples/docker-inventory.yml`](examples/docker-inventory.yml). Set `docker_swarm_daemon_config: null` if you manage `daemon.json` separately. The [example playbook](examples/docker.yml) calls `tasks_from: install`.
 
 ```bash
 ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
@@ -114,7 +114,7 @@ ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
 | `docker_swarm_advertise_addr` | Required, inherited from the group or set per host | Swarm interface name or IP address. Examples with a port include `10.0.0.11:2377` and `[2001:db8::11]:2377`. |
 | `docker_swarm_listen_addr` | `0.0.0.0:2377` | Swarm listen address and port for initialization or join. |
 | `docker_swarm_data_path_addr` | Empty | IP address or interface for overlay traffic. Docker defaults to the advertised address. |
-| `docker_swarm_daemon_config` | Unset | YAML mapping written to `/etc/docker/daemon.json`. |
+| `docker_swarm_daemon_config` | Debug disabled, `json-file` with `100m` and `3` files | YAML mapping written to `/etc/docker/daemon.json`. |
 | `docker_swarm_node_role` | Inferred from legacy inventory groups | Desired host role, `manager` or `worker`. |
 | `docker_swarm_allow_init` | `false` | Explicitly allows cluster initialization for the current run. |
 | `docker_swarm_default_addr_pools` | `[]` | List of CIDRs for overlay networks, used at `swarm init`. |
@@ -161,19 +161,17 @@ Choose ranges that avoid overlaps with host networks, VPNs, local bridges, and o
 
 **Use any Linux `daemon.json` option supported by the installed Docker Engine.** Put the exact Docker option names and values in `docker_swarm_daemon_config`. The role serializes the entire YAML mapping into JSON, preserving value types and nested structures. It has no allowlist of option names. Docker checks the generated file with `dockerd --validate` before the role replaces the current file. [Docker reference for Linux `daemon.json` options](https://docs.docker.com/reference/cli/dockerd/#on-linux)
 
-Set the mapping for all hosts, a group, or an individual host. Provide the full mapping at each level where you define it. With Ansible's default variable precedence, an override replaces the mapping. An unset variable leaves the file unmanaged. An empty mapping (`{}`) writes an empty JSON object.
+The role applies the following configuration by default. It recursively merges the effective inventory mapping into these defaults. Explicit values take precedence, nested mappings merge by key, and lists are replaced as a whole. For example, setting only `log-opts.max-file` keeps the default `log-opts.max-size`. Ansible's variable precedence determines which inventory mapping applies to each host. An empty mapping (`{}`) uses the defaults, and `null` leaves the existing file alone.
 
 ```yaml
 all:
   vars:
     docker_swarm_daemon_config:
+      debug: false
       log-driver: json-file
       log-opts:
         max-size: "100m"
-        max-file: "5"
-      max-concurrent-downloads: 3
-      max-concurrent-uploads: 5
-      debug: false
+        max-file: "3"
 ```
 
 This example produces the following `/etc/docker/daemon.json`. Keep `log-opts` values as strings.
@@ -183,11 +181,9 @@ This example produces the following `/etc/docker/daemon.json`. Keep `log-opts` v
   "debug": false,
   "log-driver": "json-file",
   "log-opts": {
-    "max-file": "5",
+    "max-file": "3",
     "max-size": "100m"
-  },
-  "max-concurrent-downloads": 3,
-  "max-concurrent-uploads": 5
+  }
 }
 ```
 

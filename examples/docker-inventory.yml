@@ -2,9 +2,3 @@
 docker_hosts:
   hosts:
     docker-1.example.com:
-  vars:
-    docker_swarm_daemon_config:
-      log-driver: json-file
-      log-opts:
-        max-size: "100m"
-        max-file: "5"

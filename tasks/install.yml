@@ -49,10 +49,14 @@
 - name: Apply daemon.json to each configured host in sequence
   ansible.builtin.include_tasks: daemon.yml
   run_once: true
-  when: not ansible_check_mode
-  loop: >-
-    {{ ansible_play_batch | map('extract', hostvars) | selectattr('docker_swarm_daemon_config', 'defined') |
-       map(attribute='inventory_hostname') | list }}
+  vars:
+    _docker_swarm_desired_daemon_config: >-
+      {{ _docker_swarm_default_daemon_config |
+         combine(hostvars[_docker_swarm_daemon_host].docker_swarm_daemon_config | default({}), recursive=true) }}
+  when:
+    - not ansible_check_mode
+    - hostvars[_docker_swarm_daemon_host].get('docker_swarm_daemon_config', {}) is not none
+  loop: "{{ ansible_play_batch }}"
   loop_control:
     loop_var: _docker_swarm_daemon_host
 

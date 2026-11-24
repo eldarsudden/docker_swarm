@@ -1,7 +1,5 @@
 ---
 - name: Validate and apply daemon.json
-  vars:
-    _docker_swarm_desired_daemon_config: "{{ hostvars[_docker_swarm_daemon_host].docker_swarm_daemon_config }}"
   docker_swarm_stdin:
     stdin: "{{ _docker_swarm_desired_daemon_config | to_nice_json(indent=2, sort_keys=true, allow_nan=false) }}"
     command: |
