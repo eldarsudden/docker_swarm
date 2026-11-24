@@ -218,6 +218,15 @@ Use bridge subnets that fit your network before enabling `bip` or `fixed-cidr`. 
 
 The role applies changes one host at a time. Before restarting an active manager, it checks that a majority of managers will remain available. It waits for the restarted manager to report `Ready` and `Reachable` before moving to the next host. If the restart or readiness check fails, the role restores the previous file and attempts to recover the service. Check `journalctl -u docker.service` for service logs. Managers with autolock enabled require a separate maintenance procedure that includes unlocking. Run one maintenance playbook at a time for a given cluster.
 
+If a manager restart is refused, check the actual Swarm manager list and autolock setting on that manager.
+
+```bash
+sudo docker node ls --filter role=manager
+sudo docker info --format '{{.Swarm.Cluster.Spec.EncryptionConfig.AutoLockManagers}}'
+```
+
+In a four-manager Swarm, the other three managers must be reachable before the role can restart one. If cluster formation stopped after the first manager, set `docker_swarm_daemon_config: null` for the membership run. Apply the daemon configuration after the remaining managers join and become reachable. [Swarm manager quorum](https://docs.docker.com/engine/swarm/admin_guide/#maintain-the-quorum-of-managers)
+
 ## Rerun behavior
 
 - The role installs missing packages and enables Docker at boot. Resolve any conflicts that DNF reports with previously installed packages before retrying. [Docker RPM installation](https://docs.docker.com/engine/install/rhel/)

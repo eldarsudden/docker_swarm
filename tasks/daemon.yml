@@ -38,7 +38,7 @@
             fi
             if [ "$control" = true ]; then
               manager_id=$node_id
-              swarm_manager_can_stop "$manager_id" {{ hostvars[_docker_swarm_daemon_host].get('docker_swarm_allow_single_manager_outage', docker_swarm_allow_single_manager_outage) | bool | ternary('true', 'false') }} || exit 22
+              swarm_manager_can_stop "$manager_id" {{ hostvars[_docker_swarm_daemon_host].get('docker_swarm_allow_single_manager_outage', docker_swarm_allow_single_manager_outage) | bool | ternary('true', 'false') }} || exit "$?"
             fi
             ;;
           *) exit 23 ;;
@@ -76,11 +76,17 @@
       {{ _docker_swarm_daemon_host }}.
       {{ {
         21: 'Changing data-root on an active Swarm node requires a separate data migration.',
-        22: 'Manager restart refused because quorum cannot be maintained or autolock is enabled.',
+        22: 'Manager restart refused by the Swarm quorum check.',
         23: 'Docker reports an unexpected local Swarm state.',
         24: 'The new Docker configuration did not start or the manager did not recover. The previous file was restored.',
-        25: 'The previous file was restored, but the Docker service or Swarm manager did not recover.'
+        25: 'The previous file was restored, but the Docker service or Swarm manager did not recover.',
+        26: 'Manager restart refused because Swarm autolock is enabled and restarting requires a manual unlock.',
+        27: 'Could not verify the Swarm autolock setting. Check docker info on this manager.',
+        28: 'Could not list Swarm managers. Check docker node ls on this manager.'
       }.get(_docker_swarm_daemon_apply.rc | default(1) | int,
             'Could not validate or apply daemon.json. Check the settings and Docker service logs.') }}
+      {{ _docker_swarm_daemon_apply.stderr_lines | default([]) |
+         select('match', '^(Reachable peer managers: [0-9]+ of [0-9]+ required [(][0-9]+ managers total[)][.]|The target manager is missing or unreachable in the Swarm manager list[.])$') |
+         join(' ') }}
   when: _docker_swarm_daemon_apply.rc | default(1) != 0
   any_errors_fatal: true

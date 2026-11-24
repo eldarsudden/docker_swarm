@@ -14,13 +14,20 @@ swarm_data_root() {
 swarm_manager_can_stop() {
   local node_id="$1" allow_single="$2" autolock managers
 
-  autolock=$(swarm_docker info --format '{{.Swarm.Cluster.Spec.EncryptionConfig.AutoLockManagers}}') || return 1
-  if [ "$autolock" != false ]; then
-    echo "Swarm manager autolock must be disabled for unattended maintenance." >&2
-    return 1
-  fi
+  autolock=$(swarm_docker info --format '{{.Swarm.Cluster.Spec.EncryptionConfig.AutoLockManagers}}') || return 27
+  case "$autolock" in
+    false) ;;
+    true)
+      echo "Swarm manager autolock requires manual unlock after restart." >&2
+      return 26
+      ;;
+    *)
+      echo "Docker did not report the Swarm autolock setting." >&2
+      return 27
+      ;;
+  esac
 
-  managers=$(swarm_docker node ls --filter role=manager --no-trunc --format '{{.ID}} {{.ManagerStatus}}') || return 1
+  managers=$(swarm_docker node ls --filter role=manager --no-trunc --format '{{.ID}} {{.ManagerStatus}}') || return 28
   printf '%s\n' "$managers" | awk -v node_id="$node_id" -v allow_single="$allow_single" '
     NF {
       total++
@@ -30,11 +37,15 @@ swarm_manager_can_stop() {
         others++
       }
     }
-    END { exit !(self && ((total == 1 && allow_single == "true") || others >= int(total / 2) + 1)) }
-  ' || {
-    echo "Stopping this Swarm manager would put the quorum at risk." >&2
-    return 1
-  }
+    END {
+      needed = int(total / 2) + 1
+      if (!self || !((total == 1 && allow_single == "true") || others >= needed)) {
+        printf "Reachable peer managers: %d of %d required (%d managers total).\n", others, needed, total
+        if (!self) print "The target manager is missing or unreachable in the Swarm manager list."
+        exit 1
+      }
+    }
+  ' >&2 || return 22
 }
 
 swarm_wait_for_manager() {
