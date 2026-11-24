@@ -27,7 +27,7 @@ swarm_manager_can_stop() {
       ;;
   esac
 
-  managers=$(swarm_docker node ls --filter role=manager --no-trunc --format '{{.ID}} {{.ManagerStatus}}') || return 28
+  managers=$(swarm_docker node ls --filter role=manager --format '{{.ID}} {{.ManagerStatus}}') || return 28
   printf '%s\n' "$managers" | awk -v node_id="$node_id" -v allow_single="$allow_single" '
     NF {
       total++
