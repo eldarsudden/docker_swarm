@@ -15,15 +15,20 @@
       almalinux) distro=alma ;;
       *) echo "Unsupported OS: $ID" >&2; exit 1 ;;
     esac
-    base_url="https://download.docker.com/linux/$distro"
     repo=/etc/yum.repos.d/docker-swarm-ce.repo
+    enabled={{ docker_swarm_repo_enabled | bool | ternary('1', '0') }}
+    if [ "$enabled" = 0 ] && [ ! -e "$repo" ]; then
+      exit 0
+    fi
+
+    base_url="https://download.docker.com/linux/$distro"
     candidate=$(mktemp "${repo}.XXXXXX")
     trap 'rm -f -- "$candidate"' EXIT
     cat > "$candidate" <<EOF
     [docker-swarm-ce-stable]
     name=Docker CE Stable
     baseurl=$base_url/$major/\$basearch/stable
-    enabled=1
+    enabled=$enabled
     gpgcheck=1
     gpgkey=$base_url/gpg
     EOF

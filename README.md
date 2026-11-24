@@ -1,6 +1,6 @@
 # Docker Swarm for Enterprise Linux 9 and 10
 
-The `docker_swarm` role installs Docker CE, enables and starts `docker.service`, and forms a Swarm from the inventory. It supports RHEL, Oracle Linux, AlmaLinux, Rocky Linux, and CentOS Stream 9 and 10 on `x86_64` and `aarch64`. It uses Docker's stable RPM repository for each distribution and enables package signature verification.
+The `docker_swarm` role installs Docker CE, enables and starts `docker.service`, and forms a Swarm from the inventory. It supports RHEL, Oracle Linux, AlmaLinux, Rocky Linux, and CentOS Stream 9 and 10 on `x86_64` and `aarch64`. By default, it uses Docker's stable RPM repository for each distribution with package signature verification enabled.
 
 The role works with Ansible 2.10 or later and requires no external collections. Remote tasks use `ansible.builtin.raw` and an action plugin bundled with the role. Only the control node needs Python. Ansible 2.10 can run with Python 3.9 and Jinja2 3.0. [Ansible support matrix](https://docs.ansible.com/projects/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix)
 
@@ -30,7 +30,7 @@ Reference the role by name in your playbook.
 
 1. Edit the `docker_swarm` group in `examples/inventory.yml`. Use hostnames or SSH aliases that the control node can connect to. Set the shared Swarm interface in the group variables and assign `docker_swarm_node_role: manager` or `docker_swarm_node_role: worker` to each host. Docker recommends three or five managers for high availability. [Swarm administration guide](https://docs.docker.com/engine/swarm/admin_guide/)
 2. The role defaults to the first detected manager. To select a specific manager, set `docker_swarm_bootstrap_host` to its exact name under `hosts` in the inventory. For an existing cluster, select a reachable manager that already belongs to that Swarm.
-3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the operating system and Docker repositories.
+3. Ensure the SSH user can run commands with `sudo` and the hosts can reach the enabled RPM repositories that provide the required packages.
 4. Allow `2377/tcp` to managers, plus `7946/tcp`, `7946/udp`, and `4789/udp` between Swarm nodes. Encrypted overlay networks also need IP protocol 50 (ESP). Limit access to the cluster network. [Swarm network requirements](https://docs.docker.com/engine/swarm/swarm-tutorial/#open-protocols-and-ports-between-the-hosts)
 
 Run the examples from the repository root in a checkout named `docker_swarm`. The bundled `ansible.cfg` adds the parent directory to the role search path. Use `-u` to select an SSH user and `-K` if `sudo` requires a password.
@@ -136,6 +136,7 @@ ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `docker_swarm_repo_enabled` | `true` | Enables the stable Docker CE RPM repository managed by this role. Set to `false` to install from the repositories already enabled on the host. |
 | `docker_swarm_inventory_group` | Automatic | Optional inventory group that defines this cluster when one inventory contains multiple clusters. An explicit `docker_swarm` also includes the legacy manager and worker groups. |
 | `docker_swarm_bootstrap_host` | First manager in the inventory | Inventory name of the manager used to initialize or access the cluster. |
 | `docker_swarm_advertise_addr` | Required, inherited from the group or set per host | Swarm interface name or IP address. Examples with a port include `10.0.0.11:2377` and `[2001:db8::11]:2377`. |
@@ -148,6 +149,16 @@ ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
 | `docker_swarm_default_addr_pool_mask_length` | Docker's default of `24` | Prefix length for each overlay subnet allocated from the configured pools. |
 | `docker_swarm_backup_dir` | `/var/backups/docker-swarm` | Directory on the manager for Swarm state archives. |
 | `docker_swarm_allow_single_manager_outage` | `false` | Allows a planned interruption when the cluster has one manager. |
+
+## Use an existing RPM repository
+
+If your hosts already use an internal Docker CE mirror, put the following setting in the inventory group variables.
+
+```yaml
+docker_swarm_repo_enabled: false
+```
+
+The role disables its existing `docker-swarm-ce-stable` entry. On a fresh host it leaves repository setup to your inventory or provisioning workflow. DNF still installs missing Docker CE, containerd, and CLI plugin packages from enabled repositories, so the mirror must provide those packages.
 
 ## Swarm advertise address
 

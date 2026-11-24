@@ -2,6 +2,9 @@
 # Optional inventory group override for automatic cluster membership detection.
 docker_swarm_inventory_group: ""
 
+# Manage the stable Docker CE repository used for package installation.
+docker_swarm_repo_enabled: true
+
 # Inventory hostname of the manager used to initialize or access the cluster.
 docker_swarm_bootstrap_host: "{{ (_docker_swarm_managers | first) | default('') }}"
 
