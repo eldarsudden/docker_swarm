@@ -46,7 +46,14 @@ Run the examples from the repository root in a checkout named `docker_swarm`. Th
 
 The role also supports the `docker_swarm_managers` and `docker_swarm_workers` inventory groups. A host's explicit `docker_swarm_node_role` takes precedence. If the role of an existing node differs from the inventory, the play fails. Promote or demote the node using Swarm before reconciling its inventory entry.
 
-Use one inventory per cluster. Run the role in a single play with `strategy: linear` and `gather_facts: false`, without batching hosts with `serial`.
+### Swarm play requirements
+
+- **Cluster scope.** The Swarm inventory groups must describe a single cluster. The inventory can include other groups, and the playbook can include other plays. Target only Swarm members in the play that runs this role.
+- **Strategy.** Use `linear` so that all selected hosts finish each task before the next task starts. You can omit `strategy` when Ansible uses its default `linear` strategy.
+- **Batch size.** Keep all selected hosts in one Ansible batch. You can omit `serial` or set it to `"100%"`. The role fails its inventory check if `serial` splits the selected hosts into multiple batches.
+- **Fact gathering.** The examples use `gather_facts: false` because the role checks Docker directly. You can enable fact gathering if other tasks in the play need it.
+
+Include every Swarm member when creating the cluster. For an existing cluster, `--limit` can select a subset that includes `docker_swarm_bootstrap_host`.
 
 ## Usage
 
@@ -61,7 +68,7 @@ The first command lists the selected hosts. Check mode validates inventory group
 
 ### Create a cluster
 
-Run the play against every host in the inventory. Pass the initialization flag for this run.
+Run the play against every host in the Swarm inventory groups. Pass the initialization flag for this run.
 
 ```bash
 ansible-playbook -i examples/inventory.yml examples/swarm.yml -e '{"docker_swarm_allow_init":true}'
@@ -194,7 +201,7 @@ The role applies changes one host at a time. Before restarting an active manager
 ## Rerun behavior
 
 - The role installs missing packages and enables Docker at boot. Resolve any conflicts that DNF reports with previously installed packages before retrying. [Docker RPM installation](https://docs.docker.com/engine/install/rhel/)
-- Initialization requires `docker_swarm_allow_init=true`, all inventory hosts in the play, and each host in the `inactive` state.
+- Initialization requires `docker_swarm_allow_init=true`, all Swarm inventory members in the play, and each member in the `inactive` state.
 - For an existing cluster, the selected manager verifies the IDs and roles of active nodes. The play stops if a node belongs to a different Swarm or its role differs from the inventory.
 - The role joins pending managers before workers and waits for selected nodes to report `Ready`. Ansible masks the output of token tasks, and SSH carries the join token over standard input.
 - Swarm address settings apply during initialization or join. Configure firewall rules separately.
