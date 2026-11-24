@@ -1,4 +1,7 @@
 ---
+# Inventory group that defines cluster membership.
+docker_swarm_inventory_group: docker_swarm
+
 # Inventory hostname of the manager used to initialize or access the cluster.
 docker_swarm_bootstrap_host: "{{ (_docker_swarm_managers | first) | default('') }}"
 

@@ -11,8 +11,9 @@
           docker_swarm_bootstrap_host={{ docker_swarm_bootstrap_host | to_json }}
           must match the inventory hostname of a detected Swarm manager.
           Detected managers: {{ _docker_swarm_managers | to_json }}.
-          Set docker_swarm_node_role to manager on a host in docker_swarm,
-          or use the docker_swarm_managers group.
+          Selected inventory group: {{ docker_swarm_inventory_group | to_json }}.
+          Set docker_swarm_node_role to manager on a cluster member.
+          For a custom inventory group, set docker_swarm_inventory_group to its name.
       run_once: true
 
     - name: Validate Swarm inventory and play batch

@@ -55,6 +55,23 @@ The role also supports the `docker_swarm_managers` and `docker_swarm_workers` in
 
 Include every Swarm member when creating the cluster. For an existing cluster, `--limit` can select a subset that includes `docker_swarm_bootstrap_host`.
 
+### Use an existing inventory group
+
+Set `docker_swarm_inventory_group` in the play to use an existing group as the cluster membership. Assign `docker_swarm_node_role: manager` or `worker` to each host in that group.
+
+```yaml
+---
+- name: Install Docker and configure Swarm
+  hosts: minio
+  gather_facts: false
+  vars:
+    docker_swarm_inventory_group: minio
+  roles:
+    - role: docker_swarm
+```
+
+For backups with this inventory, also target `minio` and set `docker_swarm_inventory_group: minio` in the backup play. Use `--limit` to select one manager.
+
 ## Usage
 
 ### Check the inventory
@@ -119,6 +136,7 @@ ansible-playbook -i examples/docker-inventory.yml examples/docker.yml
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `docker_swarm_inventory_group` | `docker_swarm` | Inventory group that defines the cluster. The default also includes the legacy manager and worker groups. |
 | `docker_swarm_bootstrap_host` | First manager in the inventory | Inventory name of the manager used to initialize or access the cluster. |
 | `docker_swarm_advertise_addr` | Required, inherited from the group or set per host | Swarm interface name or IP address. Examples with a port include `10.0.0.11:2377` and `[2001:db8::11]:2377`. |
 | `docker_swarm_listen_addr` | `0.0.0.0:2377` | Swarm listen address and port for initialization or join. |
