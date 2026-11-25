@@ -80,21 +80,42 @@
       loop_control:
         label: "{{ item.key }}"
 
-    - name: Validate Swarm secrets and stacks mappings
+    - name: Validate the Swarm stacks mapping
       ansible.builtin.assert:
         that:
-          - docker_swarm_secrets is mapping
           - docker_swarm_stacks is mapping
-        fail_msg: Set docker_swarm_secrets and docker_swarm_stacks to mappings.
+        fail_msg: Set docker_swarm_stacks to a mapping.
       run_once: true
 
-    - name: Validate Swarm secret entries
-      ansible.builtin.assert:
-        that:
-          - item.key is string and item.key is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
-          - (item.value is string or item.value is vault_encrypted) and item.value | length > 0
-      loop: "{{ docker_swarm_secrets | dict2items }}"
-      no_log: true
+    - name: Read the Swarm secret names
+      run_once: true
+      block:
+        - name: Validate the Swarm secrets mapping
+          ansible.builtin.assert:
+            that:
+              - docker_swarm_secrets is mapping
+          no_log: true
+
+        - name: Record configured Swarm secret names
+          ansible.builtin.set_fact:
+            _docker_swarm_secret_names: "{{ docker_swarm_secrets.keys() | list }}"
+          no_log: true
+      rescue:
+        - name: Report an unreadable Swarm secrets mapping
+          ansible.builtin.fail:
+            msg: >-
+              {% if ansible_failed_result.assertion is defined %}
+              Set docker_swarm_secrets to a mapping of secret names to text values.
+              {% else %}
+              Could not read docker_swarm_secrets. Check its variable references and supply
+              the matching Ansible Vault password if it contains encrypted values.
+              {% endif %}
+
+    - name: Validate configured Swarm secrets
+      ansible.builtin.include_tasks: validate-secret.yml
+      loop: "{{ _docker_swarm_secret_names }}"
+      loop_control:
+        loop_var: _docker_swarm_secret_name
       run_once: true
 
     - name: Validate Swarm stack entries

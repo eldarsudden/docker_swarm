@@ -177,7 +177,7 @@ The role updates keys whose values differ and preserves other node labels.
 
 ## Create secrets and deploy stacks
 
-Set these variables for the cluster in the inventory or play. Store real secret values in Ansible Vault.
+Set these variables for the cluster in the inventory or play. Store real secret values in Ansible Vault and provide the matching password with `--ask-vault-pass` or `--vault-id`. Secret validation reports the name and reason on failure while keeping the value out of the task output.
 
 ```yaml
 docker_swarm_secrets:
