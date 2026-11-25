@@ -2,29 +2,37 @@
 _docker_swarm_standard_members: >-
   {{ (groups.get('docker_swarm', []) + groups.get('docker_swarm_managers', []) +
       groups.get('docker_swarm_workers', [])) | unique | list }}
-_docker_swarm_members: >-
-  {%- if docker_swarm_inventory_group == 'docker_swarm' or
-         (not docker_swarm_inventory_group and
-          ansible_play_hosts_all | difference(_docker_swarm_standard_members) | length == 0) -%}
-  {{ _docker_swarm_standard_members }}
-  {%- elif docker_swarm_inventory_group -%}
+_docker_swarm_discover_by_role: >-
+  {{ not docker_swarm_inventory_group and
+     ansible_play_hosts_all | difference(_docker_swarm_standard_members) | length > 0 }}
+_docker_swarm_candidate_hosts: >-
+  {%- if _docker_swarm_discover_by_role -%}
+  {{ groups['all'] }}
+  {%- elif docker_swarm_inventory_group and docker_swarm_inventory_group != 'docker_swarm' -%}
   {{ groups.get(docker_swarm_inventory_group, []) }}
   {%- else -%}
-  {{ groups['all'] | map('extract', hostvars) | selectattr('docker_swarm_node_role', 'defined') |
-     map(attribute='inventory_hostname') | list }}
+  {{ _docker_swarm_standard_members }}
   {%- endif -%}
+# Read only the role field. Rendering a whole hostvars mapping can decrypt unrelated Vault values.
+_docker_swarm_roles_by_host: >-
+  {%- set inventory = namespace(roles=[]) -%}
+  {%- for host in _docker_swarm_candidate_hosts if hostvars[host].docker_swarm_node_role is defined -%}
+    {%- set inventory.roles = inventory.roles + [(host, hostvars[host].docker_swarm_node_role)] -%}
+  {%- endfor -%}
+  {{ dict(inventory.roles) }}
+_docker_swarm_members: >-
+  {{ _docker_swarm_roles_by_host.keys() | list if _docker_swarm_discover_by_role else _docker_swarm_candidate_hosts }}
 _docker_swarm_explicit_hosts: >-
-  {{ _docker_swarm_members | map('extract', hostvars) |
-     selectattr('docker_swarm_node_role', 'defined') | list }}
+  {{ _docker_swarm_members | select('in', _docker_swarm_roles_by_host) | list }}
 _docker_swarm_implicit_hosts: >-
-  {{ _docker_swarm_members | reject('in', _docker_swarm_explicit_hosts | map(attribute='inventory_hostname') | list) | list }}
+  {{ _docker_swarm_members | reject('in', _docker_swarm_roles_by_host) | list }}
 _docker_swarm_managers: >-
-  {{ (_docker_swarm_explicit_hosts | selectattr('docker_swarm_node_role', 'equalto', 'manager') |
-      map(attribute='inventory_hostname') | list) +
+  {{ (_docker_swarm_explicit_hosts | select('in', _docker_swarm_roles_by_host | dict2items |
+      selectattr('value', 'equalto', 'manager') | map(attribute='key') | list) | list) +
      (_docker_swarm_implicit_hosts | select('in', groups.get('docker_swarm_managers', [])) | list) }}
 _docker_swarm_workers: >-
-  {{ (_docker_swarm_explicit_hosts | selectattr('docker_swarm_node_role', 'equalto', 'worker') |
-      map(attribute='inventory_hostname') | list) +
+  {{ (_docker_swarm_explicit_hosts | select('in', _docker_swarm_roles_by_host | dict2items |
+      selectattr('value', 'equalto', 'worker') | map(attribute='key') | list) | list) +
      (_docker_swarm_implicit_hosts | select('in', groups.get('docker_swarm_workers', [])) | list) }}
 _docker_swarm_cli: docker --host unix:///var/run/docker.sock
 _docker_swarm_node_format: !unsafe '{{.Swarm.LocalNodeState}} {{.Swarm.NodeID}}'
