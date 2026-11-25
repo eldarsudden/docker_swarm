@@ -208,7 +208,9 @@ secrets:
 
 The role applies node labels before creating missing secrets and deploying stacks on the bootstrap manager. It keeps existing secrets by name. To rotate a secret, create a new name and update the Compose file to reference it. [Docker Swarm secrets](https://docs.docker.com/engine/swarm/secrets/#example-rotate-a-secret)
 
-Compose paths are absolute or relative to the playbook directory on the control node. The role sends the file over standard input to `docker stack deploy` on the manager. The manager must be able to read files used by the Compose loader, such as `env_file`. Bind-mount sources must exist on the nodes that run the service. Each run submits every configured stack and reports the deployment as changed. [Docker stack deploy](https://docs.docker.com/reference/cli/docker/stack/deploy/)
+The role reads Compose files on the control node using Ansible's standard file lookup, including the `files/` directory alongside the playbook. For example, `stacks/storage.yml` can resolve to `files/stacks/storage.yml`. If you provide only a filename such as `storage.yml`, the role also tries `stacks/storage.yml` as a fallback. Absolute paths are supported.
+
+The role sends the file over standard input to `docker stack deploy` on the manager. The manager must be able to read files used by the Compose loader, such as `env_file`. Bind-mount sources must exist on the nodes that run the service. Each run submits every configured stack and reports the deployment as changed. [Docker stack deploy](https://docs.docker.com/reference/cli/docker/stack/deploy/)
 
 ## Use an existing RPM repository
 
